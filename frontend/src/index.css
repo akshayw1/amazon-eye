@@ -1,0 +1,113 @@
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,300;1,400;1,500;1,600;1,700;1,800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-primary text-text-primary antialiased font-sans;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  a {
+    @apply text-text-link hover:text-text-link-hover transition-colors duration-200;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-amazon-orange text-text-primary font-medium px-4 py-2 rounded 
+           hover:bg-amazon-yellow focus:outline-none focus:ring-2 
+           focus:ring-offset-2 focus:ring-amazon-orange transition-colors duration-200;
+  }
+
+  .btn-secondary {
+    @apply bg-white text-text-primary border border-amazon-border px-4 py-2 rounded 
+           hover:bg-secondary focus:outline-none focus:ring-2 
+           focus:ring-offset-2 focus:ring-amazon-light transition-colors duration-200;
+  }
+
+  .input-primary {
+    @apply mt-1 block w-full rounded border-amazon-border bg-amazon-input
+           focus:border-amazon-light focus:ring-amazon-light transition-colors duration-200;
+  }
+
+  .card {
+    @apply bg-white rounded-lg shadow-card p-4 hover:shadow-lg transition-shadow duration-200;
+  }
+
+  .nav-link {
+    @apply text-white hover:text-amazon-yellow transition-colors duration-200;
+  }
+
+  .product-card {
+    @apply bg-white rounded-lg shadow-card p-4 hover:shadow-lg 
+           transition-all duration-300 hover:-translate-y-1;
+  }
+
+  .price {
+    @apply text-amazon-price text-xl font-bold;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-success {
+    @apply bg-green-100 text-green-800;
+  }
+
+  .badge-warning {
+    @apply bg-yellow-100 text-yellow-800;
+  }
+
+  .badge-error {
+    @apply bg-red-100 text-red-800;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  @apply w-2;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-secondary;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-amazon-light rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-amazon-hover;
+}
+
+/* Loading spinner */
+.spinner {
+  @apply animate-spin rounded-full h-6 w-6 border-4;
+  border-top-color: theme('colors.amazon.light');
+  border-right-color: theme('colors.amazon.border');
+  border-bottom-color: theme('colors.amazon.border');
+  border-left-color: theme('colors.amazon.border');
+}
+
+/* Dark mode overrides */
+.dark {
+  @apply bg-amazon-dark text-white;
+}
+
+.dark .card,
+.dark .product-card {
+  @apply bg-amazon-light text-white;
+}
+
+.dark .input-primary {
+  @apply bg-amazon-hover border-amazon-light text-white;
+}
+
+.dark .btn-secondary {
+  @apply bg-amazon-hover text-white border-amazon-light;
+}
