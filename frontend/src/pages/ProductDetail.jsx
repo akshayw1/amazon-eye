@@ -1,6 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import Layout from '../components/layout/Layout';
 import { TrustSidebar, TrustSummary, TrustBadge } from '../components/trust';
+import { Pagination } from '../components/ui';
+import { productsApi, reviewsApi } from '../services/api';
 import { 
   Star, 
   Heart,
@@ -37,6 +40,7 @@ import {
 } from 'lucide-react';
 
 const ProductDetailPage = () => {
+  const { id } = useParams();
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState('M');
@@ -48,113 +52,168 @@ const ProductDetailPage = () => {
   const [voiceQuery, setVoiceQuery] = useState('');
   const [reviewFilter, setReviewFilter] = useState('all');
   const [isWishlisted, setIsWishlisted] = useState(false);
+  const [product, setProduct] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [reviews, setReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsPagination, setReviewsPagination] = useState({
+    page: 1,
+    perPage: 10,
+    total: 0,
+    totalPages: 0
+  });
+  const [currentPage, setCurrentPage] = useState(1);
 
-  // Mock product data
-  const product = {
-    id: 1,
-    name: "Boult Q Over Ear Bluetooth Headphones with 70H Playtime, 40mm Bass Drivers, Zen™ ENC Mic, Type-C Fast Charging, 4 EQ Modes, BTv 5.4, AUX Option",
-    brand: "SoundTech Pro",
-    price: 8999,
-    originalPrice: 12999,
-    rating: 4.3,
-    reviewsCount: 2847,
-    trustScore: 87,
-    trustBadge: "trusted",
-    inStock: true,
-    category: "Electronics > Audio > Headphones",
-    sku: "ST-WH-2024-001",
-    images: [
-      "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&h=600&fit=crop",
-      "https://images.unsplash.com/photo-1484704849700-f032a568e944?w=600&h=600&fit=crop", 
-      "https://images.unsplash.com/photo-1545127398-14699f92334b?w=600&h=600&fit=crop",
-      "https://images.unsplash.com/photo-1583394838336-acd977736f90?w=600&h=600&fit=crop"
-    ],
-    colors: ['Black', 'White', 'Silver', 'Blue'],
-    sizes: ['S', 'M', 'L'],
-    highlights: [
-      'Premium 40mm drivers for exceptional sound quality',
-      'Active Noise Cancellation technology',
-      'Up to 30 hours battery life with ANC off',
-      'Quick charge: 5 minutes for 2 hours playback',
-      'Comfortable over-ear design',
-      'Built-in microphone for calls'
-    ],
-    specifications: {
-      'Driver Size': '40mm',
-      'Frequency Response': '20Hz - 20kHz',
-      'Battery Life': '30 hours (ANC off), 20 hours (ANC on)',
-      'Charging Time': '2 hours',
-      'Weight': '280g',
-      'Connectivity': 'Bluetooth 5.0, 3.5mm jack',
-      'Warranty': '1 year'
+  // Fetch product data (without reviews)
+  useEffect(() => {
+    const fetchProduct = async () => {
+      try {
+        const response = await productsApi.getProduct(id);
+        
+        // Map API response to component state
+        setProduct({
+          id: response.id,
+          name: response.name,
+          description: response.description,
+          price: response.price,
+          originalPrice: response.price * 1.3, // Calculate 30% markup for original price
+          brand: response.seller?.name || 'Unknown Brand',
+          category: response.category,
+          stock: response.stock,
+          trustScore: Math.round(response.trustScore) || 37,
+          trustBadge: response.trustScore > 70 ? "trusted" : response.trustScore > 40 ? "verified" : "caution",
+          rating: response.averageRating || 4.26,
+          reviewsCount: response._count?.reviewInfos || response.reviewCount || 0,
+          images: response.images?.length ? response.images : ["https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&h=600&fit=crop"],
+          colors: ['Default'], // Since no color data in API
+          sizes: ['One Size'], // Since no size data in API
+          highlights: [
+            response.description || 'High-quality product',
+            'Verified seller',
+            response.stock > 50 ? 'In stock' : 'Limited stock',
+            `${response.reviewCount || 0} customer reviews`
+          ],
+          specifications: {
+            'Brand': response.seller?.name || 'Unknown',
+            'Category': response.category || 'General',
+            'Stock': response.stock?.toString() || 'N/A',
+            'Product ID': response.id,
+            'Created': new Date(response.createdAt).toLocaleDateString() || 'N/A'
+          },
+          fakeProbability: response.fakeProbability || 0,
+          sellerId: response.sellerId,
+          createdAt: response.createdAt,
+          updatedAt: response.updatedAt
+        });
+        
+        // Set default selections based on available options
+        setSelectedColor('Default');
+        setSelectedSize('One Size');
+        
+      } catch (error) {
+        console.error('Error fetching product:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) {
+      fetchProduct();
+    }
+  }, [id]);
+
+  // Fetch reviews separately with pagination
+  const fetchReviews = async (page = 1) => {
+    if (!id) return;
+    
+    try {
+      setReviewsLoading(true);
+      const response = await reviewsApi.getProductReviews(id, { 
+        page, 
+        perPage: reviewsPagination.perPage 
+      });
+
+      // Map reviews data
+      const mappedReviews = response.data?.map(review => ({
+        id: review.id,
+        user: `Reviewer ${review.reviewerId}`,
+        rating: review.reviewRating,
+        review: review.reviewBody,
+        title: review.reviewTitle || '',
+        date: new Date(review.reviewDate).toLocaleDateString(),
+        verified: !review.isAiGenerated, // Non-AI generated reviews are verified
+        authentic: !review.isAiGenerated, // Non-AI generated reviews are authentic
+        helpful: review.numberOfHelpful || 0,
+        aiGenerated: review.isAiGenerated || false,
+        aiScore: review.aiGeneratedScore || 0
+      })) || [];
+
+      setReviews(mappedReviews);
+      setReviewsPagination(response.pagination);
+      
+    } catch (error) {
+      console.error('Error fetching reviews:', error);
+      setReviews([]);
+    } finally {
+      setReviewsLoading(false);
     }
   };
 
-  const trustBreakdown = {
-    reviews: 92,
-    seller: 78,
-    product: 91,
-    authenticity: 85
+  // Load reviews when component mounts or active tab changes
+  useEffect(() => {
+    if (activeTab === 'reviews' && id) {
+      fetchReviews(reviewsPagination.page);
+    }
+  }, [id, activeTab, reviewsPagination.page]);
+
+  // Handle review page change
+  const handleReviewPageChange = (page) => {
+    setReviewsPagination(prev => ({ ...prev, page }));
   };
 
+  // Trust breakdown based on actual API data
+  const trustBreakdown = product ? {
+    reviews: Math.max(20, Math.round(100 - (product.fakeProbability * 100))), // Higher fake probability = lower review trust
+    seller: Math.round(product.trustScore * 0.8), // Seller score based on trust score
+    product: Math.round(product.trustScore * 1.1), // Product score slightly higher
+    authenticity: Math.round(100 - (product.fakeProbability * 100)) // Authenticity inversely related to fake probability
+  } : { reviews: 92, seller: 78, product: 91, authenticity: 85 };
+
+  // Keep existing alternatives as dummy data since not provided by API
   const alternatives = [
     {
       id: 2,
-      name: "Audio Elite Pro Max",
+      name: "Similar Product 1",
       price: 9999,
       trustScore: 95,
       image: "https://images.unsplash.com/photo-1484704849700-f032a568e944?w=300&h=300&fit=crop"
     },
     {
       id: 3,
-      name: "SoundWave Premium",
+      name: "Similar Product 2",
       price: 7999,
       trustScore: 89,
       image: "https://images.unsplash.com/photo-1545127398-14699f92334b?w=300&h=300&fit=crop"
     },
     {
       id: 4,
-      name: "Bass Master Pro",
+      name: "Similar Product 3",
       price: 8499,
       trustScore: 92,
       image: "https://images.unsplash.com/photo-1583394838336-acd977736f90?w=300&h=300&fit=crop"
     }
   ];
 
-  const reviews = [
-    {
-      id: 1,
-      user: "Rahul Kumar",
-      rating: 5,
-      date: "2 days ago",
-      verified: true,
-      helpful: 23,
-      review: "Excellent sound quality and comfortable to wear for long periods. The noise cancellation works really well.",
-      authentic: true
-    },
-    {
-      id: 2,
-      user: "Priya Singh",
-      rating: 4,
-      date: "1 week ago",
-      verified: true,
-      helpful: 15,
-      review: "Good headphones but the bass could be better. Battery life is impressive though.",
-      authentic: true
-    },
-    {
-      id: 3,
-      user: "TechReviewer2024",
-      rating: 5,
-      date: "2 weeks ago",
-      verified: false,
-      helpful: 2,
-      review: "Amazing product! Best headphones ever! 5 stars!",
-      authentic: false
-    }
-  ];
-
-  const trustHistory = [
+  // Generate trust history based on current trust score
+  const trustHistory = product ? [
+    { date: '2024-01-15', score: product.trustScore - 5 },
+    { date: '2024-01-20', score: product.trustScore - 3 },
+    { date: '2024-01-25', score: product.trustScore - 2 },
+    { date: '2024-01-30', score: product.trustScore - 1 },
+    { date: '2024-02-05', score: product.trustScore },
+    { date: '2024-02-10', score: product.trustScore + 1 },
+    { date: '2024-02-15', score: product.trustScore }
+  ] : [
     { date: '2024-01-15', score: 89 },
     { date: '2024-01-20', score: 87 },
     { date: '2024-01-25', score: 85 },
@@ -164,16 +223,43 @@ const ProductDetailPage = () => {
     { date: '2024-02-15', score: 87 }
   ];
 
-
-
   const handleVoiceQuery = (query) => {
     setVoiceQuery(query);
     // Simulate AI response
     setTimeout(() => {
       setVoiceQuery('');
-      alert(`AI Response for "${query}": This product has a high trust score and excellent reviews. It's verified by our authentication system.`);
+      alert(`AI Response for "${query}": This product has a trust score of ${product?.trustScore || 85} and ${reviews.length} reviews. Fake probability is ${Math.round((product?.fakeProbability || 0) * 100)}%.`);
     }, 2000);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-pulse space-y-8 w-full max-w-7xl mx-auto p-4">
+          <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div className="lg:col-span-9">
+              <div className="bg-white rounded-xl p-8">
+                <div className="h-96 bg-gray-200 rounded-lg mb-4"></div>
+                <div className="space-y-4">
+                  <div className="h-8 bg-gray-200 rounded w-1/2"></div>
+                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                  <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+                </div>
+              </div>
+            </div>
+            <div className="lg:col-span-3">
+              <div className="h-96 bg-gray-200 rounded-xl"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!product) {
+    return <div className="min-h-screen bg-gray-50 flex items-center justify-center text-xl">Product not found</div>;
+  }
 
   return (
   <>
@@ -182,9 +268,8 @@ const ProductDetailPage = () => {
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="text-sm text-gray-600">
             <a href="#" className="hover:text-blue-600">Home</a> &gt; 
-            <a href="#" className="hover:text-blue-600 ml-1">Electronics</a> &gt; 
-            <a href="#" className="hover:text-blue-600 ml-1">Audio</a> &gt; 
-            <span className="ml-1 text-gray-900">Headphones</span>
+            <a href="#" className="hover:text-blue-600 ml-1">{product.category}</a> &gt; 
+            <span className="ml-1 text-gray-900">{product.name}</span>
           </div>
         </div>
       </div>
@@ -262,7 +347,7 @@ const ProductDetailPage = () => {
                       <Star key={i} size={18} fill={i < Math.floor(product.rating) ? "currentColor" : "none"} />
                   ))}
                 </div>
-                  <span className="font-semibold text-gray-900">{product.rating}</span>
+                  <span className="font-semibold text-gray-900">{product.rating.toFixed(1)}</span>
                   <a href="#reviews" className="text-blue-600 hover:text-blue-800 hover:underline">
                   ({product.reviewsCount.toLocaleString()} reviews)
                 </a>
@@ -271,13 +356,13 @@ const ProductDetailPage = () => {
                 {/* Pricing */}
                 <div className="bg-gradient-to-r from-gray-50 to-white p-6 rounded-2xl border border-gray-100">
                   <div className="flex items-baseline gap-3 mb-2">
-                    <span className="text-3xl font-bold text-gray-900">₹{product.price.toLocaleString()}</span>
-                    <span className="text-xl text-gray-500 line-through">₹{product.originalPrice.toLocaleString()}</span>
+                    <span className="text-3xl font-bold text-gray-900">${product.price}</span>
+                    <span className="text-xl text-gray-500 line-through">${product.originalPrice.toFixed(2)}</span>
                     <span className="bg-red-500 text-white px-3 py-1 rounded-full text-sm font-bold">
                     {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
                   </span>
                 </div>
-                  <p className="text-green-600 font-semibold">You save ₹{(product.originalPrice - product.price).toLocaleString()}</p>
+                  <p className="text-green-600 font-semibold">You save ${(product.originalPrice - product.price).toFixed(2)}</p>
               </div>
 
                 {/* Product Options */}
@@ -359,7 +444,9 @@ const ProductDetailPage = () => {
                     <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
                   <Truck className="text-green-600" size={16} />
                 </div>
-                    <span className="text-gray-700">Free delivery by <strong>Tomorrow</strong></span>
+                    <span className="text-gray-700">
+                      {product.stock > 10 ? 'Free delivery by Tomorrow' : 'Limited stock - Order soon'}
+                    </span>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
@@ -371,7 +458,9 @@ const ProductDetailPage = () => {
                     <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
                   <Award className="text-purple-600" size={16} />
                     </div>
-                    <span className="text-gray-700">1 year warranty included</span>
+                    <span className="text-gray-700">
+                      Stock: {product.stock} items available
+                    </span>
                 </div>
               </div>
             </div>
@@ -404,7 +493,10 @@ const ProductDetailPage = () => {
                 {activeTab === 'description' && (
                   <div className="space-y-4">
                     <h3 className="text-lg font-semibold text-gray-900">About this item</h3>
-                    <ul className="space-y-3">
+                    <div className="prose text-gray-700 leading-relaxed">
+                      <p>{product.description}</p>
+                    </div>
+                    <ul className="space-y-3 mt-6">
                       {product.highlights.map((highlight, index) => (
                         <li key={index} className="flex items-start gap-3">
                           <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
@@ -432,7 +524,14 @@ const ProductDetailPage = () => {
                 {activeTab === 'reviews' && (
                   <div className="space-y-6">
                     <div className="flex justify-between items-center">
-                      <h3 className="text-lg font-semibold text-gray-900">Customer Reviews</h3>
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        Customer Reviews
+                        {reviewsPagination.total > 0 && (
+                          <span className="text-sm font-normal text-gray-500 ml-2">
+                            ({reviewsPagination.total} total)
+                          </span>
+                        )}
+                      </h3>
                       <select 
                         value={reviewFilter}
                         onChange={(e) => setReviewFilter(e.target.value)}
@@ -444,50 +543,135 @@ const ProductDetailPage = () => {
                       </select>
                     </div>
                     
-                    <div className="space-y-6">
-                      {reviews
-                        .filter(review => {
-                          if (reviewFilter === 'verified') return review.verified;
-                          if (reviewFilter === 'authentic') return review.authentic;
-                          return true;
-                        })
-                        .map((review) => (
-                        <div key={review.id} className="bg-gray-50 rounded-xl p-5 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <span className="font-semibold text-gray-900">{review.user}</span>
-                              {review.verified && (
-                                <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full font-medium">
-                                  Verified Purchase
-                                </span>
-                              )}
-                              {!review.authentic && (
-                                <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-medium">
-                                  Flagged
-                                </span>
-                              )}
+                    {reviewsLoading ? (
+                      <div className="space-y-4">
+                        {[...Array(5)].map((_, i) => (
+                          <div key={i} className="bg-gray-50 rounded-xl p-5 animate-pulse">
+                            <div className="flex items-center gap-3 mb-3">
+                              <div className="w-20 h-4 bg-gray-200 rounded"></div>
+                              <div className="w-16 h-6 bg-gray-200 rounded-full"></div>
                             </div>
-                            <span className="text-sm text-gray-500">{review.date}</span>
+                            <div className="flex gap-1 mb-3">
+                              {[...Array(5)].map((_, j) => (
+                                <div key={j} className="w-4 h-4 bg-gray-200 rounded"></div>
+                              ))}
+                            </div>
+                            <div className="space-y-2">
+                              <div className="w-full h-4 bg-gray-200 rounded"></div>
+                              <div className="w-3/4 h-4 bg-gray-200 rounded"></div>
+                              <div className="w-1/2 h-4 bg-gray-200 rounded"></div>
+                            </div>
                           </div>
-                          <div className="flex text-yellow-400">
-                            {[...Array(5)].map((_, i) => (
-                              <Star key={i} size={16} fill={i < review.rating ? "currentColor" : "none"} />
-                            ))}
-                          </div>
-                          <p className="text-gray-700 leading-relaxed">{review.review}</p>
-                          <div className="flex items-center gap-4 text-sm text-gray-500">
-                            <button className="flex items-center gap-2 hover:text-blue-600 transition-colors">
-                              <ThumbsUp size={14} />
-                              Helpful ({review.helpful})
-                            </button>
-                            <button className="flex items-center gap-2 hover:text-red-600 transition-colors">
-                              <Flag size={14} />
-                              Report
-                            </button>
-                          </div>
+                        ))}
+                      </div>
+                    ) : reviews.length === 0 ? (
+                      <div className="text-center py-12">
+                        <MessageCircle size={48} className="mx-auto text-gray-400 mb-4" />
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">No reviews yet</h3>
+                        <p className="text-gray-500">Be the first to review this product!</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="space-y-6">
+                          {reviews
+                            .filter(review => {
+                              if (reviewFilter === 'verified') return review.verified;
+                              if (reviewFilter === 'authentic') return review.authentic;
+                              return true;
+                            })
+                            .map((review) => (
+                            <div key={review.id} className={`rounded-xl p-5 space-y-3 ${
+                              review.aiGenerated ? 'bg-red-50 border border-red-200' : 'bg-gray-50'
+                            }`}>
+                              {/* AI Generated Warning */}
+                              {review.aiGenerated && (
+                                <div className="bg-red-100 border border-red-300 rounded-lg p-3 mb-4">
+                                  <div className="flex items-start gap-3">
+                                    <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                      <span className="text-white text-xs font-bold">!</span>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <p className="text-red-800 font-medium text-sm">⚠️ AI Generated Review Detected</p>
+                                      <p className="text-red-700 text-xs">
+                                        This review has been flagged as potentially AI-generated with {Math.round(review.aiScore * 100)}% confidence. 
+                                        Exercise caution when considering this feedback for your purchase decision.
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <span className="font-semibold text-gray-900">{review.user}</span>
+                                  {review.verified && !review.aiGenerated && (
+                                    <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full font-medium">
+                                      ✓ Verified Purchase
+                                    </span>
+                                  )}
+                                  {review.aiGenerated && (
+                                    <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-medium">
+                                      🤖 AI Generated ({Math.round(review.aiScore * 100)}%)
+                                    </span>
+                                  )}
+                                  {!review.authentic && !review.aiGenerated && (
+                                    <span className="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full font-medium">
+                                      ⚠️ Flagged
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-sm text-gray-500">{review.date}</span>
+                              </div>
+                              
+                              <div className="flex text-yellow-400">
+                                {[...Array(5)].map((_, i) => (
+                                  <Star key={i} size={16} fill={i < review.rating ? "currentColor" : "none"} />
+                                ))}
+                              </div>
+                              
+                              {review.title && (
+                                <h4 className={`font-medium ${review.aiGenerated ? 'text-red-900' : 'text-gray-900'}`}>
+                                  {review.title}
+                                </h4>
+                              )}
+                              
+                              <p className={`leading-relaxed ${review.aiGenerated ? 'text-red-800' : 'text-gray-700'}`}>
+                                {review.review}
+                              </p>
+                              
+                              <div className="flex items-center gap-4 text-sm text-gray-500">
+                                <button className="flex items-center gap-2 hover:text-blue-600 transition-colors">
+                                  <ThumbsUp size={14} />
+                                  Helpful ({review.helpful})
+                                </button>
+                                <button className="flex items-center gap-2 hover:text-red-600 transition-colors">
+                                  <Flag size={14} />
+                                  Report
+                                </button>
+                                {review.aiGenerated && (
+                                  <span className="text-red-600 text-xs font-medium">
+                                    ⚠️ Use caution - AI generated content
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
+
+                        {/* Pagination */}
+                        {reviewsPagination.totalPages > 1 && (
+                          <div className="border-t border-gray-200 pt-6">
+                            <Pagination
+                              currentPage={reviewsPagination.page}
+                              totalPages={reviewsPagination.totalPages}
+                              totalItems={reviewsPagination.total}
+                              itemsPerPage={reviewsPagination.perPage}
+                              onPageChange={handleReviewPageChange}
+                            />
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -520,22 +704,22 @@ const ProductDetailPage = () => {
                 trustScore: 83,
                 image: "https://images.unsplash.com/photo-1484704849700-f032a568e944?w=300&h=300&fit=crop"
               }
-            ]).map((product) => (
-              <div key={product.id} className="bg-white rounded-lg shadow-md hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+            ]).map((alternativeProduct) => (
+              <div key={alternativeProduct.id} className="bg-white rounded-lg shadow-md hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
                 <div className="relative overflow-hidden rounded-t-lg">
                   <img 
-                    src={product.image} 
-                    alt={product.name}
+                    src={alternativeProduct.image} 
+                    alt={alternativeProduct.name}
                     className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
                   />
                   <div className="absolute top-2 left-2 bg-green-500 text-white px-2 py-1 rounded-full text-xs font-medium">
-                    Trust: {product.trustScore}/100
+                    Trust: {alternativeProduct.trustScore}/100
                   </div>
                 </div>
                 <div className="p-4">
-                  <h3 className="font-medium text-gray-800 mb-2 line-clamp-2">{product.name}</h3>
+                  <h3 className="font-medium text-gray-800 mb-2 line-clamp-2">{alternativeProduct.name}</h3>
                   <div className="flex items-center justify-between">
-                    <span className="text-lg font-bold text-gray-900">₹{product.price.toLocaleString()}</span>
+                    <span className="text-lg font-bold text-gray-900">${alternativeProduct.price.toLocaleString()}</span>
                     <button className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-700 transition-colors">
                       View
                     </button>

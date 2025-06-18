@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ProductCard } from '../components/product';
+import { productsApi } from '../services/api';
 import { 
   Shield, 
   ChevronLeft,
@@ -10,88 +11,23 @@ import {
 
 const TrustCommerce = () => {
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Mock data for products
-  const featuredProducts = [
-    {
-      id: 1,
-      name: "Wireless Bluetooth Headphones",
-      price: 2499,
-      originalPrice: 3999,
-      image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=300&fit=crop",
-      trustScore: 92,
-      trustBadge: "trusted",
-      reviews: 1234,
-      rating: 4.5,
-      category: "Electronics",
-      bestseller: true
-    },
-    {
-      id: 2,
-      name: "Smart Fitness Watch",
-      price: 8999,
-      originalPrice: 12999,
-      image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=300&fit=crop",
-      trustScore: 88,
-      trustBadge: "trusted",
-      reviews: 856,
-      rating: 4.3,
-      category: "Wearables",
-      bestseller: false
-    },
-    {
-      id: 3,
-      name: "Laptop Backpack",
-      price: 1299,
-      originalPrice: 1999,
-      image: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&h=300&fit=crop",
-      trustScore: 75,
-      trustBadge: "caution",
-      reviews: 432,
-      rating: 4.1,
-      category: "Accessories",
-      bestseller: false
-    },
-    {
-      id: 4,
-      name: "Smartphone Case",
-      price: 599,
-      originalPrice: 999,
-      image: "https://images.unsplash.com/photo-1601593346740-925612772716?w=400&h=300&fit=crop",
-      trustScore: 95,
-      trustBadge: "trusted",
-      reviews: 2341,
-      rating: 4.7,
-      category: "Mobile Accessories",
-      bestseller: true
-    },
-    {
-      id: 5,
-      name: "Gaming Mouse",
-      price: 1899,
-      originalPrice: 2499,
-      image: "https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?w=400&h=300&fit=crop",
-      trustScore: 45,
-      trustBadge: "risk",
-      reviews: 123,
-      rating: 3.2,
-      category: "Gaming",
-      bestseller: false
-    },
-    {
-      id: 6,
-      name: "Bluetooth Speaker",
-      price: 3499,
-      originalPrice: 4999,
-      image: "https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?w=400&h=300&fit=crop",
-      trustScore: 87,
-      trustBadge: "trusted",
-      reviews: 967,
-      rating: 4.4,
-      category: "Audio",
-      bestseller: false
-    }
-  ];
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const response = await productsApi.getProducts({ page: 1, perPage: 12 });
+        setProducts(response.data);
+      } catch (error) {
+        console.error('Error fetching products:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, []);
 
   const bannerSlides = [
     {
@@ -139,8 +75,6 @@ const TrustCommerce = () => {
     }, 5000);
     return () => clearInterval(timer);
   }, []);
-
-
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -236,20 +170,39 @@ const TrustCommerce = () => {
 
       {/* Featured Products */}
       <section className="max-w-7xl mx-auto px-4 py-12">
-        <div className="flex justify-between items-center mb-10">
-          <div>
-            <h2 className="text-4xl font-bold text-gray-800 mb-2">Featured Products</h2>
-            <p className="text-xl text-gray-600">Handpicked products with verified trust scores</p>
+        <div className="flex justify-between items-center mb-8">
+          <h2 className="text-2xl font-bold text-gray-800">Featured Products</h2>
+        </div>
+        
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="bg-white rounded-xl shadow-lg p-4 animate-pulse">
+                <div className="w-full h-56 bg-gray-200 rounded-lg mb-4"></div>
+                <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+              </div>
+            ))}
           </div>
-          <button className="bg-blue-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors shadow-lg">
-            View All Products
-          </button>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-          {featuredProducts.slice(0, 8).map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {products.map((product) => (
+              <ProductCard
+                key={product.id}
+                product={{
+                  ...product,
+                  trustScore: product.trustScore || 85, // Default if not provided
+                  trustBadge: product.trustBadge || "trusted", // Default if not provided
+                  rating: product.rating || 4.5, // Default if not provided
+                  reviews: product._count?.reviewInfos || 0,
+                  bestseller: product.bestseller || false,
+                  originalPrice: product.originalPrice || Math.round(product.price * 1.2), // Default if not provided
+                  image: product.images?.[0] || "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=300&fit=crop", // Default if not provided
+                }}
+              />
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Trust Features */}
@@ -284,7 +237,6 @@ const TrustCommerce = () => {
           </div>
         </div>
       </section>
-
 
     </div>
   );

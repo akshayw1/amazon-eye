@@ -23,8 +23,6 @@ model User {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   products  Product[] // Products created by the user (as seller)
-  reviews   Review[]  // Reviews written by the user
-  reviewInfos ReviewInfo[] // Detailed reviews written by the user
 }
 
 model Product {
@@ -37,34 +35,18 @@ model Product {
   category    String
   sellerId    String       // Reference to the seller (User)
   seller      User         @relation(fields: [sellerId], references: [id])
-  reviews     Review[]     // Reviews for this product
-  reviewInfos ReviewInfo[] // Detailed reviews written by the user
+  reviewInfos ReviewInfo[] // Detailed reviews for this product
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
-  trust       ProductTrust? // Relation to trust metrics
-  analysis    ProductAnalysis? @relation("ProductToAnalysis") // Relation to analysis metrics
+  
+  // Additional fields from JSON data
+  originalProductId Int?    @map("product_ID") // Original numeric product ID
+  fakeProbability  Float?   @map("fake_score") // Probability of being fake
+  trustScore       Float?   @map("trust_score") // Trust score from original data
+  reviewCount      Int?     @map("n_of_reviews") // Number of reviews
+  averageRating    Float?   @map("avg_review_rating") // Average review rating
 
   @@index([sellerId])
-}
-
-model Review {
-  id        String   @id @default(uuid())
-  rating    Int      // Rating from 1-5
-  comment   String
-  ipAddress String   // IP address of the reviewer
-  userId    String   // Reference to the user who wrote the review
-  user      User     @relation(fields: [userId], references: [id])
-  productId String   // Reference to the product being reviewed
-  product   Product  @relation(fields: [productId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relation to ProductAnalysis
-  productAnalysis   ProductAnalysis? @relation("ProductAnalysisReviews", fields: [productAnalysisId], references: [id])
-  productAnalysisId String?
-
-  @@index([userId])
-  @@index([productId])
 }
 
 model ReviewInfo {
@@ -75,115 +57,20 @@ model ReviewInfo {
   reviewTitle     String   // Title of the review
   reviewDate      DateTime // Date the review was posted
   productId       String   // Product ID associated with the review
-  reviewerId      String   // Unique reviewer identifier
+  reviewerId      String   // Unique reviewer identifier as String
+  
+  // Additional fields from JSON data
+  isAiGenerated   Boolean? @map("ai_generated") // Whether the review is AI generated
+  aiGeneratedScore Float?  @map("generated_score") // AI generation probability score
   
   // Relations
   product         Product  @relation(fields: [productId], references: [id])
-  reviewer        User     @relation(fields: [reviewerId], references: [id])
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   @@index([productId])
-  @@index([reviewerId])
   @@map("review_info")
-}
-
-model ProductTrust {
-  id                    String   @id @default(uuid())
-  productId            String   @unique
-  product              Product  @relation(fields: [productId], references: [id])
-
-  // Trust Scores (0-100)
-  overallTrustScore     Int      // Main trust score displayed to users
-  reviewTrustScore      Int      // Review authenticity score
-  sellerTrustScore      Int      // Seller reliability score
-  productTrustScore     Int      // Product authenticity score
-
-  // Trust Badge
-  trustBadge            TrustBadge // TRUSTED, CAUTION, RISK
-  trustBadgeColor       String     // green, yellow, red
-  badgeDisplayText      String     // "Trusted", "Caution", "Risk"
-  badgeReason          String?    // Why this badge was assigned
-  confidenceLevel      Float      // 0.0-1.0 confidence in score
-
-  // Review Analysis
-  totalReviews         Int
-  authenticReviews     Int
-  suspiciousReviews    Int
-  reviewQualityScore   Float     // 0.0-1.0
-  aiGeneratedProbability Float?   // 0.0-1.0 probability reviews are AI-written
-
-  // Counterfeit Detection
-  counterfeiteRisk     Float?    // 0.0-1.0 probability of counterfeit
-  imageAnalysisScore   Float?    // Image authenticity score
-  logoTamperingDetected Boolean  @default(false)
-
-  // Seller Trust
-  sellerReliabilityScore Float?   // 0.0-1.0
-  sellerFraudReports    Int      @default(0)
-  sellerVerified        Boolean  @default(false)
-
-  // Fraud Flags
-  activeFraudFlags     Json?     // Array of active fraud flags
-  fraudFlagCount       Int      @default(0)
-  moderatorFlagged     Boolean  @default(false)
-  moderatorNotes       String?
-
-  // Monitoring
-  watchlistCount       Int      @default(0)
-  alertsGenerated      Int      @default(0)
-  lastAlertSent        DateTime?
-  monitoringActive     Boolean  @default(true)
-
-  // Analysis relation
-  analysis            ProductAnalysis? @relation("ProductTrustToAnalysis")
-
-  // Timestamps
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-  lastAnalyzed        DateTime  @default(now())
-
-  @@index([overallTrustScore])
-  @@index([trustBadge])
-  @@index([counterfeiteRisk])
-  @@map("product_trust")
-}
-
-model ProductAnalysis {
-  id                      String   @id @default(cuid())
-  product_ID              String   @unique // Your existing product identifier
-  
-  // Review Statistics
-  n_of_reviews            Int      // Number of reviews for the product
-  avg_review_rating       Float    // Average review rating
-  avg_days_between_reviews Float   // Average days between reviews
-  max_days_between_reviews Int     // Maximum days between reviews
-  min_days_between_reviews Int     // Minimum days between reviews
-  
-  // Network Analysis Metrics
-  cluster_ID              Int      // Cluster assignment for the product
-  pagerank                Float    // PageRank score in product graph
-  eigenvector_cent        Float    // Eigenvector centrality
-  clustering_coef         Float    // Clustering coefficient
-  w_degree                Int      // Weighted degree (shared reviewers)
-  
-  // Fraud Detection Results
-  fake_score              Float    // Probability of being fake (0.0-1.0)
-  fake                    Int      // Binary fake label (1=fake, 0=real)
-  
-  // Relations
-  product                 Product  @relation("ProductToAnalysis", fields: [product_ID], references: [id], map: "product_analysis_to_product")
-  productTrust            ProductTrust @relation("ProductTrustToAnalysis", fields: [product_ID], references: [productId], map: "product_analysis_to_trust")
-  reviews                 Review[] @relation("ProductAnalysisReviews")
-  
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
-  
-  @@index([product_ID])
-  @@index([fake_score])
-  @@index([cluster_ID])
-  @@map("product_analysis")
 }
 
 enum Role {
@@ -191,10 +78,4 @@ enum Role {
   ADMIN
   CUSTOMER
   SELLER
-}
-
-enum TrustBadge {
-  TRUSTED
-  CAUTION
-  RISK
 }

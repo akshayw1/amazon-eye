@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 // Create review
 router.post('/:productId', auth, async (req, res) => {
   try {
-    const { rating, comment } = req.body;
+    const { rating, comment, title } = req.body;
     const productId = req.params.productId;
 
     // Check if product exists
@@ -20,12 +20,12 @@ router.post('/:productId', auth, async (req, res) => {
       return res.status(404).json({ message: 'Product not found' });
     }
 
-    // Check if user has already reviewed this product
-    const existingReview = await prisma.review.findFirst({
+    // Check if user has already reviewed this product (based on reviewerId)
+    const existingReview = await prisma.reviewInfo.findFirst({
       where: {
         AND: [
           { productId },
-          { userId: req.user.id },
+          { reviewerId: req.user.id },
         ],
       },
     });
@@ -34,55 +34,63 @@ router.post('/:productId', auth, async (req, res) => {
       return res.status(400).json({ message: 'You have already reviewed this product' });
     }
 
-    // Get client IP address
-    const ipAddress = req.ip || req.connection.remoteAddress || 'unknown';
-
-    const review = await prisma.review.create({
+    const review = await prisma.reviewInfo.create({
       data: {
-        rating,
-        comment,
-        ipAddress,
-        userId: req.user.id,
+        reviewRating: rating,
+        reviewBody: comment,
+        reviewTitle: title || 'Review',
+        reviewDate: new Date(),
+        reviewerId: req.user.id,
         productId,
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
+        numberOfHelpful: 0,
+        isAiGenerated: false,
+        aiGeneratedScore: 0,
       },
     });
 
     res.status(201).json(review);
   } catch (error) {
+    console.error('Error creating review:', error);
     res.status(400).json({ message: 'Error creating review' });
   }
 });
 
-// Get reviews for a product
+// Get reviews for a product with pagination
 router.get('/product/:productId', async (req, res) => {
   try {
-    const reviews = await prisma.review.findMany({
+    const { page = 1, perPage = 10 } = req.query;
+    const pageNum = parseInt(page);
+    const perPageNum = parseInt(perPage);
+
+    // Get total count for pagination
+    const totalReviews = await prisma.reviewInfo.count({
+      where: { productId: req.params.productId }
+    });
+
+    // Get paginated reviews
+    const reviews = await prisma.reviewInfo.findMany({
       where: {
         productId: req.params.productId,
       },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
       orderBy: {
-        createdAt: 'desc',
+        reviewDate: 'desc',
       },
+      skip: (pageNum - 1) * perPageNum,
+      take: perPageNum,
     });
 
-    res.json(reviews);
+    // Return reviews with pagination info
+    res.json({
+      data: reviews,
+      pagination: {
+        total: totalReviews,
+        page: pageNum,
+        perPage: perPageNum,
+        totalPages: Math.ceil(totalReviews / perPageNum)
+      }
+    });
   } catch (error) {
+    console.error('Error fetching reviews:', error);
     res.status(400).json({ message: 'Error fetching reviews' });
   }
 });
@@ -90,7 +98,7 @@ router.get('/product/:productId', async (req, res) => {
 // Update review
 router.put('/:id', auth, async (req, res) => {
   try {
-    const review = await prisma.review.findUnique({
+    const review = await prisma.reviewInfo.findUnique({
       where: { id: req.params.id },
     });
 
@@ -98,28 +106,22 @@ router.put('/:id', auth, async (req, res) => {
       return res.status(404).json({ message: 'Review not found' });
     }
 
-    if (review.userId !== req.user.id) {
+    if (review.reviewerId !== req.user.id) {
       return res.status(403).json({ message: 'Not authorized' });
     }
 
-    const updatedReview = await prisma.review.update({
+    const updatedReview = await prisma.reviewInfo.update({
       where: { id: req.params.id },
       data: {
-        rating: req.body.rating,
-        comment: req.body.comment,
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
+        reviewRating: req.body.rating,
+        reviewBody: req.body.comment,
+        reviewTitle: req.body.title,
       },
     });
 
     res.json(updatedReview);
   } catch (error) {
+    console.error('Error updating review:', error);
     res.status(400).json({ message: 'Error updating review' });
   }
 });
@@ -127,7 +129,7 @@ router.put('/:id', auth, async (req, res) => {
 // Delete review
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const review = await prisma.review.findUnique({
+    const review = await prisma.reviewInfo.findUnique({
       where: { id: req.params.id },
     });
 
@@ -135,16 +137,17 @@ router.delete('/:id', auth, async (req, res) => {
       return res.status(404).json({ message: 'Review not found' });
     }
 
-    if (review.userId !== req.user.id) {
+    if (review.reviewerId !== req.user.id) {
       return res.status(403).json({ message: 'Not authorized' });
     }
 
-    await prisma.review.delete({
+    await prisma.reviewInfo.delete({
       where: { id: req.params.id },
     });
 
     res.json({ message: 'Review deleted' });
   } catch (error) {
+    console.error('Error deleting review:', error);
     res.status(400).json({ message: 'Error deleting review' });
   }
 });
