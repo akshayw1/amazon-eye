@@ -149,4 +149,198 @@ The system integrates with an outbound calling service:
 1. **Automatic Calls**: When return requests are created, the system automatically initiates calls
 2. **Call Tracking**: Tracks call status (pending, initiated, completed, failed)
 3. **Transcript Storage**: Stores conversation transcripts in JSON format
-4. **AI Analysis**: Automatically analyzes completed calls for insights 
+4. **AI Analysis**: Automatically analyzes completed calls for insights
+
+## Database Backup & Restore
+
+The system includes comprehensive backup and restore functionality to protect your data.
+
+### Creating a Backup
+
+To create a complete backup of your database:
+
+```bash
+node backup_database.js
+```
+
+This will:
+- ✅ Create a timestamped JSON backup file in the `./backups/` directory
+- ✅ Include all data: users, products, reviews, orders, return requests, and edit history
+- ✅ Generate a summary file with backup statistics
+- ✅ Preserve all relationships and foreign key constraints
+
+**Example Output:**
+```
+🔄 Starting database backup...
+📊 Fetching users...
+📦 Fetching products...
+⭐ Fetching reviews...
+🛒 Fetching orders...
+📝 Fetching order items...
+🔄 Fetching return requests...
+📋 Fetching product edit history...
+💾 Writing backup to file...
+✅ Database backup completed successfully!
+📁 Backup saved to: ./backups/amazon_eye_backup_2025-06-20T22-20-23-920Z.json
+📊 Total records backed up: 15319
+```
+
+### Backup Contents
+
+Each backup includes:
+- **Users**: All user accounts and authentication data
+- **Products**: Complete product catalog with seller information
+- **Reviews**: Customer reviews and ratings with IP tracking
+- **Orders**: Order management system data with shipping info
+- **Order Items**: Individual order line items with pricing
+- **Return Requests**: Return requests with call tracking and AI summaries
+- **Product Edit History**: Complete audit trail of product changes
+
+### Restoring from Backup
+
+To restore your database from a backup file:
+
+```bash
+node restore_database.js ./backups/amazon_eye_backup_2025-06-20T22-20-23-920Z.json
+```
+
+**⚠️ Important Notes:**
+- The restore process will **DELETE ALL EXISTING DATA** before restoring
+- You have a 5-second window to cancel with `Ctrl+C`
+- The restore maintains all relationships and foreign key constraints
+- Data is restored in the correct order to avoid constraint violations
+
+**Example Restore Process:**
+```
+🔄 Starting database restore...
+📖 Reading backup file...
+📊 Backup metadata:
+- Created: 2025-06-20T22:20:23.920Z
+- Version: 1.0
+- Description: Amazon Eye Database Backup
+
+⚠️  WARNING: This will delete all existing data!
+Press Ctrl+C to cancel, or wait 5 seconds to continue...
+
+🗑️  Clearing existing data...
+✅ Existing data cleared
+
+📥 Restoring data...
+👥 Restoring users...
+✅ Restored 6 users
+📦 Restoring products...
+✅ Restored 120 products
+⭐ Restoring reviews...
+✅ Restored 15178 reviews
+🛒 Restoring orders...
+✅ Restored 4 orders
+📝 Restoring order items...
+✅ Restored 4 order items
+🔄 Restoring return requests...
+✅ Restored 3 return requests
+📋 Restoring product edit history...
+✅ Restored 4 edit history records
+
+🎉 Database restore completed successfully!
+```
+
+### Backup Best Practices
+
+1. **Regular Backups**: Create backups before major updates or migrations
+2. **Version Control**: Keep multiple backup versions for different time periods
+3. **Test Restores**: Periodically test restore process in development environment
+4. **Secure Storage**: Store backup files in secure, encrypted locations
+5. **Automated Backups**: Consider setting up automated daily/weekly backups
+
+### Backup File Structure
+
+The backup files are JSON formatted with the following structure:
+
+```json
+{
+  "metadata": {
+    "timestamp": "2025-06-20T22:20:23.920Z",
+    "version": "1.0",
+    "description": "Amazon Eye Database Backup",
+    "totalRecords": {
+      "users": 6,
+      "products": 120,
+      "reviews": 15178,
+      "orders": 4,
+      "orderItems": 4,
+      "returnRequests": 3,
+      "productEditHistory": 4
+    }
+  },
+  "data": {
+    "users": [...],
+    "products": [...],
+    "reviews": [...],
+    "orders": [...],
+    "orderItems": [...],
+    "returnRequests": [...],
+    "productEditHistory": [...]
+  }
+}
+```
+
+### Alternative Backup Methods
+
+For additional backup options, you can also use:
+
+**PostgreSQL pg_dump** (if available):
+```bash
+pg_dump -h localhost -U postgres -d amazon_eye -f amazon_eye_backup_$(date +%Y%m%d_%H%M%S).sql
+```
+
+**Docker PostgreSQL Backup**:
+```bash
+docker exec -t $(docker ps -q --filter "name=postgres") pg_dump -U postgres amazon_eye > amazon_eye_sql_backup_$(date +%Y%m%d_%H%M%S).sql
+```
+
+### Troubleshooting
+
+**Common Issues:**
+
+1. **Permission Errors**: Ensure the `backups/` directory has write permissions
+2. **Memory Issues**: For very large databases, consider increasing Node.js memory limit:
+   ```bash
+   node --max-old-space-size=4096 backup_database.js
+   ```
+3. **Connection Errors**: Verify database connection and Prisma configuration
+4. **Foreign Key Violations**: The restore script handles constraint order automatically
+
+**Recovery from Failed Restore:**
+If a restore fails midway, you can:
+1. Check the error message for specific issues
+2. Restore from a previous backup
+3. Use the database migration system to rebuild schema if needed
+
+### Quick Reference
+
+**Create Backup:**
+```bash
+# Create a complete database backup
+node backup_database.js
+
+# Check backup files
+ls -la backups/
+```
+
+**Restore Database:**
+```bash
+# Restore from specific backup file
+node restore_database.js ./backups/amazon_eye_backup_YYYY-MM-DDTHH-MM-SS-sssZ.json
+
+# List available backups
+ls -la backups/*.json
+```
+
+**Backup Schedule Example:**
+```bash
+# Daily backup (add to crontab)
+0 2 * * * cd /path/to/backend && node backup_database.js
+
+# Weekly backup with cleanup (keep last 4 weeks)
+0 3 * * 0 cd /path/to/backend && node backup_database.js && find backups/ -name "*.json" -mtime +28 -delete
+``` 
