@@ -23,13 +23,19 @@ const LoginPage = () => {
   const [rememberMe, setRememberMe] = useState(false);
   
   const navigate = useNavigate();
-  const { login, isAuthenticated, getDashboardRoute } = useAuth();
+  const { login, isAuthenticated, getDashboardRoute ,user} = useAuth();
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (isAuthenticated()) {
-      const dashboardRoute = getDashboardRoute();
-      navigate(dashboardRoute);
+    try {
+      if (isAuthenticated()) {
+        const dashboardRoute = getDashboardRoute();
+        console.log('useEffect navigating to:', dashboardRoute);
+        navigate(dashboardRoute);
+      }
+    } catch (error) {
+      console.error('useEffect navigation error:', error);
+      toast.error('Navigation error occurred');
     }
   }, [isAuthenticated, navigate, getDashboardRoute]);
 
@@ -48,8 +54,7 @@ const LoginPage = () => {
       
       if (result.success) {
         toast.success('Login successful!');
-        const dashboardRoute = getDashboardRoute();
-        navigate(dashboardRoute);
+        // Navigation will be handled by useEffect when isAuthenticated() becomes true
       } else {
         toast.error(result.error || 'Login failed');
       }

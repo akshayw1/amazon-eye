@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import Layout from '../components/layout/Layout';
 import { TrustSidebar, TrustSummary, TrustBadge } from '../components/trust';
+import { ReviewForm } from '../components';
 import { Pagination } from '../components/ui';
 import { productsApi, reviewsApi } from '../services/api';
 import { 
@@ -36,11 +38,14 @@ import {
   XCircle,
   Filter,
   Clock,
-  Camera
+  Camera,
+  Plus
 } from 'lucide-react';
 
 const ProductDetailPage = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState('M');
@@ -63,6 +68,35 @@ const ProductDetailPage = () => {
     totalPages: 0
   });
   const [currentPage, setCurrentPage] = useState(1);
+  const [showReviewForm, setShowReviewForm] = useState(false);
+
+  // Handle new review submission
+  const handleReviewSubmitted = (newReview) => {
+    // Add the new review to the beginning of the reviews array
+    setReviews(prevReviews => [newReview, ...prevReviews]);
+    
+    // Update reviews pagination count
+    setReviewsPagination(prev => ({
+      ...prev,
+      total: prev.total + 1
+    }));
+    
+    // Update product reviews count
+    if (product) {
+      setProduct(prev => ({
+        ...prev,
+        reviewsCount: prev.reviewsCount + 1
+      }));
+    }
+    
+    // Hide the review form
+    setShowReviewForm(false);
+    
+    // Optionally refresh reviews to get the latest data
+    setTimeout(() => {
+      fetchReviews(1);
+    }, 1000);
+  };
 
   // Fetch product data (without reviews)
   useEffect(() => {
@@ -169,6 +203,31 @@ const ProductDetailPage = () => {
   // Handle review page change
   const handleReviewPageChange = (page) => {
     setReviewsPagination(prev => ({ ...prev, page }));
+  };
+
+  // Handle buy now
+  const handleBuyNow = () => {
+    if (!user) {
+      navigate('/login', { 
+        state: { 
+          returnTo: `/product/${id}`,
+          message: 'Please login to purchase this product' 
+        }
+      });
+      return;
+    }
+
+    if (!product) {
+      return;
+    }
+
+    // Navigate to checkout with product data
+    navigate('/checkout', { 
+      state: { 
+        product: product,
+        quantity: quantity
+      }
+    });
   };
 
   // Trust breakdown based on actual API data
@@ -433,9 +492,12 @@ const ProductDetailPage = () => {
                   <button className="w-full bg-gradient-to-r from-yellow-400 to-orange-400 hover:from-yellow-500 hover:to-orange-500 text-gray-900 font-bold py-4 px-6 rounded-xl transition-all duration-200 transform hover:scale-[1.02] shadow-lg hover:shadow-xl">
                   Add to Cart
                 </button>
-                  <button className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold py-4 px-6 rounded-xl transition-all duration-200 transform hover:scale-[1.02] shadow-lg hover:shadow-xl">
-                  Buy Now
-                </button>
+                  <button 
+                    onClick={handleBuyNow}
+                    className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold py-4 px-6 rounded-xl transition-all duration-200 transform hover:scale-[1.02] shadow-lg hover:shadow-xl"
+                  >
+                    Buy Now
+                  </button>
               </div>
 
               {/* Delivery Info */}
@@ -532,16 +594,34 @@ const ProductDetailPage = () => {
                           </span>
                         )}
                       </h3>
-                      <select 
-                        value={reviewFilter}
-                        onChange={(e) => setReviewFilter(e.target.value)}
-                        className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
-                      >
-                        <option value="all">All Reviews</option>
-                        <option value="verified">Verified Only</option>
-                        <option value="authentic">Authentic Only</option>
-                      </select>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setShowReviewForm(!showReviewForm)}
+                          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                        >
+                          <Plus className="w-4 h-4" />
+                          {showReviewForm ? 'Cancel' : 'Write Review'}
+                        </button>
+                        <select 
+                          value={reviewFilter}
+                          onChange={(e) => setReviewFilter(e.target.value)}
+                          className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+                        >
+                          <option value="all">All Reviews</option>
+                          <option value="verified">Verified Only</option>
+                          <option value="authentic">Authentic Only</option>
+                        </select>
+                      </div>
                     </div>
+
+                    {/* Review Form */}
+                    {showReviewForm && (
+                      <ReviewForm
+                        productId={id}
+                        onReviewSubmitted={handleReviewSubmitted}
+                        onClose={() => setShowReviewForm(false)}
+                      />
+                    )}
                     
                     {reviewsLoading ? (
                       <div className="space-y-4">

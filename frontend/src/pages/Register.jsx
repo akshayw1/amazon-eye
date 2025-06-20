@@ -91,11 +91,28 @@ const RegisterPage = () => {
 
     try {
       const fullName = `${formData.firstName} ${formData.lastName}`;
-      const result = await register(fullName, formData.email, formData.password, formData.role);
+      const result = await register(fullName, formData.email, formData.password, formData.role, formData.phone);
       
       if (result.success) {
         toast.success('Registration successful! Welcome to Amazon Eye!');
-        const dashboardRoute = getDashboardRoute();
+        
+        // Use user data directly from register response instead of context state
+        const userRole = result?.user?.role;
+        let dashboardRoute = '/';
+        
+        switch (userRole) {
+          case 'ADMIN':
+            dashboardRoute = '/admin/dashboard';
+            break;
+          case 'SELLER':
+            dashboardRoute = '/seller/dashboard';
+            break;
+          case 'CUSTOMER':
+          default:
+            dashboardRoute = '/';
+            break;
+        }
+        
         navigate(dashboardRoute);
       } else {
         toast.error(result.error || 'Registration failed');

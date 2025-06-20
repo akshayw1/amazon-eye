@@ -15,29 +15,36 @@ datasource db {
 }
 
 model User {
-  id        String    @id @default(uuid())
-  email     String    @unique
-  password  String
-  name      String
-  role      Role      @default(CUSTOMER)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  products  Product[] // Products created by the user (as seller)
+  id            String          @id @default(uuid())
+  email         String          @unique
+  password      String
+  name          String
+  phone         String?         // Phone number for user
+  role          Role            @default(CUSTOMER)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  products      Product[]       // Products created by the user (as seller)
+  orders        Order[]         // Orders placed by the user
+  returnRequests ReturnRequest[] // Return requests created by the user
+  productEdits  ProductEditHistory[] // Product edits made by the user
 }
 
 model Product {
-  id          String       @id @default(uuid())
+  id          String          @id @default(uuid())
   name        String
   description String
   price       Float
   stock       Int
-  images      String[]     // Array of image URLs
+  images      String[]        // Array of image URLs
   category    String
-  sellerId    String       // Reference to the seller (User)
-  seller      User         @relation(fields: [sellerId], references: [id])
-  reviewInfos ReviewInfo[] // Detailed reviews for this product
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  sellerId    String          // Reference to the seller (User)
+  seller      User            @relation(fields: [sellerId], references: [id])
+  reviewInfos ReviewInfo[]    // Detailed reviews for this product
+  orderItems  OrderItem[]     // Order items for this product
+  returnRequests ReturnRequest[] // Return requests for this product
+  editHistory ProductEditHistory[] // Edit history for this product
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
   
   // Additional fields from JSON data
   originalProductId Int?    @map("product_ID") // Original numeric product ID
@@ -49,6 +56,36 @@ model Product {
   @@index([sellerId])
 }
 
+model ProductEditHistory {
+  id              String   @id @default(uuid())
+  productId       String   // Reference to the product
+  product         Product  @relation(fields: [productId], references: [id])
+  editedBy        String   // User who made the edit
+  editor          User     @relation(fields: [editedBy], references: [id])
+  
+  // Fields that were changed
+  fieldChanged    String   // Name of the field that was changed
+  oldValue        String?  // Previous value (stored as string)
+  newValue        String?  // New value (stored as string)
+  
+  // Edit metadata
+  editReason      String?  // Optional reason for the edit
+  editType        EditType @default(UPDATE) // Type of edit operation
+  
+  createdAt       DateTime @default(now())
+
+  @@index([productId])
+  @@index([editedBy])
+  @@index([createdAt])
+}
+
+enum EditType {
+  CREATE
+  UPDATE
+  DELETE
+  RESTORE
+}
+
 model ReviewInfo {
   id              String   @id @default(uuid())
   reviewRating    Int      // Review score (1 to 5 stars)
@@ -58,6 +95,7 @@ model ReviewInfo {
   reviewDate      DateTime // Date the review was posted
   productId       String   // Product ID associated with the review
   reviewerId      String   // Unique reviewer identifier as String
+  ipAddress       String?  // IP address of the reviewer (optional for existing data)
   
   // Additional fields from JSON data
   isAiGenerated   Boolean? @map("ai_generated") // Whether the review is AI generated
@@ -73,9 +111,120 @@ model ReviewInfo {
   @@map("review_info")
 }
 
+model Order {
+  id               String      @id @default(uuid())
+  orderNumber      String      @unique @default(uuid())
+  userId           String      // Customer who placed the order
+  user             User        @relation(fields: [userId], references: [id])
+  items            OrderItem[] // Items in this order
+  returnRequests   ReturnRequest[] // Return requests for this order
+  
+  // Shipping Information
+  shippingAddress  String
+  city             String
+  state            String
+  zipCode          String
+  firstName        String
+  lastName         String
+  email            String
+  phone            String?
+  
+  // Order Details
+  subtotal         Float       // Sum of all items
+  tax              Float       // Tax amount
+  shipping         Float       // Shipping cost
+  total            Float       // Final total
+  status           OrderStatus @default(PENDING)
+  
+  // Payment Information
+  paymentMethod    String?     // e.g., "Credit Card", "PayPal"
+  paymentStatus    PaymentStatus @default(PENDING)
+  
+  // Timestamps
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  shippedAt        DateTime?
+  deliveredAt      DateTime?
+
+  @@index([userId])
+  @@index([orderNumber])
+}
+
+model OrderItem {
+  id          String   @id @default(uuid())
+  orderId     String   // Reference to the order
+  order       Order    @relation(fields: [orderId], references: [id])
+  productId   String   // Reference to the product
+  product     Product  @relation(fields: [productId], references: [id])
+  quantity    Int      // Quantity ordered
+  price       Float    // Price at time of order
+  total       Float    // quantity * price
+  createdAt   DateTime @default(now())
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model ReturnRequest {
+  id              String         @id @default(uuid())
+  orderId         String         // Reference to the order
+  order           Order          @relation(fields: [orderId], references: [id])
+  userId          String         // User requesting return
+  user            User           @relation(fields: [userId], references: [id])
+  productId       String         // Product being returned
+  product         Product        @relation(fields: [productId], references: [id])
+  
+  title           String         // Return request title
+  reason          String         // Reason for return
+  description     String?        // Additional description
+  status          ReturnStatus   @default(PENDING)
+  
+  // Call tracking
+  isCalled        String         @default("pending") // Call status: pending, initiated, completed, failed
+  callSid         String?        @unique // Call SID from calling service
+  transcript      Json?          // Array of conversation objects [{type: 'agent/user', text: '', timestamp: ''}]
+  aiSummary       String?        // AI-generated summary of the call conversation
+  
+  // Admin response
+  adminResponse   String?        // Admin's response to the return request
+  refundAmount    Float?         // Amount to be refunded
+  
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  processedAt     DateTime?      // When the return was processed
+
+  @@index([orderId])
+  @@index([userId])
+  @@index([productId])
+}
+
 enum Role {
   USER
   ADMIN
   CUSTOMER
   SELLER
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum ReturnStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PROCESSED
+  COMPLETED
 }

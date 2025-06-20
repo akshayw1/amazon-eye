@@ -1,5 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import NetworkGraph from '../components/NetworkGraph';
+import NetworkGraphOptimized from '../components/NetworkGraphOptimized';
+import ClusterNetworkGraph from '../components/ClusterNetworkGraph';
+import AdminOrderManagement from '../components/AdminOrderManagement';
 import { 
   Users, 
   Package, 
@@ -10,11 +14,18 @@ import {
   BarChart3,
   AlertCircle,
   UserCheck,
-  Eye
+  Eye,
+  Network,
+  ArrowLeft,
+  Zap
 } from 'lucide-react';
 
 const AdminDashboard = () => {
   const { user } = useAuth();
+  const [showNetworkGraph, setShowNetworkGraph] = useState(false);
+  const [showOptimizedGraph, setShowOptimizedGraph] = useState(false);
+  const [showClusterNetwork, setShowClusterNetwork] = useState(false);
+  const [showOrderManagement, setShowOrderManagement] = useState(false);
 
   const stats = [
     { name: 'Total Users', value: '2,847', icon: Users, color: 'bg-blue-500' },
@@ -26,12 +37,164 @@ const AdminDashboard = () => {
   const quickActions = [
     { name: 'Manage Users', icon: Users, description: 'View and manage user accounts' },
     { name: 'Product Oversight', icon: Package, description: 'Monitor product listings and quality' },
+    { name: 'Order Management', icon: ShoppingCart, description: 'Manage orders and update delivery status', action: () => setShowOrderManagement(true) },
     { name: 'Trust Analytics', icon: BarChart3, description: 'View trust scores and fraud detection' },
+    { name: 'Network Analysis', icon: Network, description: 'Visualize product network clusters (120 products)', action: () => setShowNetworkGraph(true) },
+    { name: 'Cluster Network Analysis', icon: Eye, description: 'Advanced cluster-based network visualization with product connections', action: () => setShowClusterNetwork(true) },
+    { name: 'Large Dataset Analysis', icon: Zap, description: 'High-performance visualization (64K products)', action: () => setShowOptimizedGraph(true) },
     { name: 'System Settings', icon: Settings, description: 'Configure platform settings' },
     { name: 'Fraud Alerts', icon: AlertCircle, description: 'Review flagged activities' },
     { name: 'Verification Queue', icon: UserCheck, description: 'Approve seller verifications' },
   ];
 
+  // Order Management view
+  if (showOrderManagement) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <AdminOrderManagement onBack={() => setShowOrderManagement(false)} />
+        </div>
+      </div>
+    );
+  }
+
+  // Full screen cluster network graph view
+  if (showClusterNetwork) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <div className="bg-white shadow-sm border-b">
+          <div className="max-w-7xl mx-auto px-4 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setShowClusterNetwork(false)}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  <ArrowLeft size={20} />
+                  <span>Back to Dashboard</span>
+                </button>
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+                    <div className="w-8 h-8 bg-gradient-to-r from-green-600 to-blue-600 rounded-lg flex items-center justify-center">
+                      <Eye className="text-white" size={20} />
+                    </div>
+                    Cluster Network Analysis
+                  </h1>
+                  <p className="text-sm text-gray-600 mt-1">Interactive product connections within and between clusters</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="bg-gradient-to-r from-green-50 to-blue-50 px-4 py-2 rounded-lg border border-green-200">
+                  <div className="text-sm text-green-700 font-medium">Admin Access</div>
+                  <div className="text-xs text-green-600">{user?.email}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Full Screen Cluster Network Graph */}
+        <div className="h-screen pt-20 pb-4 px-4">
+          <div className="h-full">
+            <ClusterNetworkGraph />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Full screen optimized network graph view
+  if (showOptimizedGraph) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <div className="bg-white shadow-sm border-b">
+          <div className="max-w-7xl mx-auto px-4 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setShowOptimizedGraph(false)}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  <ArrowLeft size={20} />
+                  <span>Back to Dashboard</span>
+                </button>
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+                    <div className="w-8 h-8 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg flex items-center justify-center">
+                      <Zap className="text-white" size={20} />
+                    </div>
+                    Large Dataset Network Analysis
+                  </h1>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-4 py-2 rounded-lg border border-purple-200">
+                  <div className="text-sm text-purple-700 font-medium">Admin Access</div>
+                  <div className="text-xs text-purple-600">{user?.email}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Full Screen Optimized Network Graph */}
+        <div className="h-screen pt-20 pb-4 px-4">
+          <div className="h-full">
+            <NetworkGraphOptimized />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Full screen network graph view (original)
+  if (showNetworkGraph) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <div className="bg-white shadow-sm border-b">
+          <div className="max-w-7xl mx-auto px-4 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setShowNetworkGraph(false)}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  <ArrowLeft size={20} />
+                  <span>Back to Dashboard</span>
+                </button>
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+                    <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+                      <Network className="text-white" size={20} />
+                    </div>
+                    Product Network Analysis
+                  </h1>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="bg-gradient-to-r from-blue-50 to-purple-50 px-4 py-2 rounded-lg border border-blue-200">
+                  <div className="text-sm text-blue-700 font-medium">Admin Access</div>
+                  <div className="text-xs text-blue-600">{user?.email}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Full Screen Network Graph */}
+        <div className="h-screen">
+          <div className="h-full">
+            <NetworkGraph />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Regular dashboard view
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -112,6 +275,7 @@ const AdminDashboard = () => {
               return (
                 <button
                   key={action.name}
+                  onClick={action.action}
                   className="text-left p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:shadow-md transition-all group"
                 >
                   <div className="flex items-start gap-3">

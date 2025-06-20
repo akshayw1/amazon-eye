@@ -11,7 +11,7 @@ const prisma = new PrismaClient();
 // Register
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, name, role } = req.body;
+    const { email, password, name, phone, role } = req.body;
 
     // Validate role if provided
     const validRoles = ['CUSTOMER', 'SELLER', 'ADMIN'];
@@ -32,6 +32,7 @@ router.post('/register', async (req, res) => {
         email,
         password: hashedPassword,
         name,
+        phone,
         role: userRole,
       },
     });
@@ -48,6 +49,7 @@ router.post('/register', async (req, res) => {
         id: user.id, 
         email: user.email, 
         name: user.name, 
+        phone: user.phone,
         role: user.role 
       }, 
       token 
@@ -105,6 +107,7 @@ router.get('/me', auth, async (req, res) => {
         id: true,
         email: true,
         name: true,
+        phone: true,
         role: true,
         createdAt: true,
       },

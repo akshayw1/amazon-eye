@@ -8,6 +8,9 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import ProductDetail from './pages/ProductDetail';
 import Checkout from './pages/Checkout';
+import CheckoutSuccess from './pages/CheckoutSuccess';
+import Orders from './pages/Orders';
+import OrderDetail from './pages/OrderDetail';
 import AdminDashboard from './pages/AdminDashboard';
 import SellerDashboard from './pages/SellerDashboard';
 
@@ -21,6 +24,9 @@ function App() {
           <Route path="/" element={<Layout><Home /></Layout>} />
           <Route path="/product/:id" element={<Layout><ProductDetail /></Layout>} />
           <Route path="/checkout" element={<Layout><Checkout /></Layout>} />
+          <Route path="/checkout/success" element={<Layout><CheckoutSuccess /></Layout>} />
+          <Route path="/orders" element={<Layout><Orders /></Layout>} />
+          <Route path="/orders/:id" element={<Layout><OrderDetail /></Layout>} />
           
           {/* Protected Dashboard Routes without Layout */}
           <Route 

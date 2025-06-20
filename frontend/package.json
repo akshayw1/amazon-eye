@@ -14,12 +14,20 @@
     "@heroicons/react": "^2.1.1",
     "@reduxjs/toolkit": "^2.0.1",
     "axios": "^1.6.2",
+    "d3-color": "^3.1.0",
+    "graphology": "^0.26.0",
+    "graphology-layout-force": "^0.2.4",
+    "graphology-layout-forceatlas2": "^0.10.1",
     "lucide-react": "^0.516.0",
+    "papaparse": "^5.5.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-hot-toast": "^2.4.1",
+    "react-markdown": "^10.1.0",
     "react-redux": "^9.0.4",
-    "react-router-dom": "^6.21.0"
+    "react-router-dom": "^6.21.0",
+    "remark-gfm": "^4.0.1",
+    "sigma": "^3.0.2"
   },
   "devDependencies": {
     "@eslint/js": "^8.56.0",

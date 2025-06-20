@@ -50,6 +50,24 @@ export const productsApi = {
     const response = await api.delete(`/products/${id}`);
     return response.data;
   },
+
+  // Get seller's products
+  getSellerProducts: async (params = { page: 1, perPage: 10 }) => {
+    const response = await api.get('/products/seller/my-products', { params });
+    return response.data;
+  },
+
+  // Update product with history tracking
+  updateProductWithHistory: async (id, productData) => {
+    const response = await api.put(`/products/${id}`, productData);
+    return response.data;
+  },
+
+  // Get product edit history
+  getProductHistory: async (id, params = { page: 1, perPage: 20 }) => {
+    const response = await api.get(`/products/${id}/history`, { params });
+    return response.data;
+  },
 };
 
 // Reviews API
@@ -75,6 +93,51 @@ export const reviewsApi = {
   // Delete a review
   deleteReview: async (reviewId) => {
     const response = await api.delete(`/reviews/${reviewId}`);
+    return response.data;
+  },
+};
+
+// Orders API
+export const ordersApi = {
+  // Create a new order
+  createOrder: async (orderData) => {
+    const response = await api.post('/orders', orderData);
+    return response.data;
+  },
+
+  // Get user's orders
+  getOrders: async (params = { page: 1, perPage: 10 }) => {
+    const response = await api.get('/orders', { params });
+    return response.data;
+  },
+
+  // Get specific order
+  getOrder: async (orderId) => {
+    const response = await api.get(`/orders/${orderId}`);
+    return response.data;
+  },
+
+  // Update order status (admin only)
+  updateOrderStatus: async (orderId, status) => {
+    const response = await api.put(`/orders/${orderId}/status`, { status });
+    return response.data;
+  },
+
+  // Create return request
+  createReturnRequest: async (orderId, returnData) => {
+    const response = await api.post(`/orders/${orderId}/return`, returnData);
+    return response.data;
+  },
+
+  // Get user's return requests
+  getReturnRequests: async () => {
+    const response = await api.get('/orders/returns/my');
+    return response.data;
+  },
+
+  // Get all orders (admin only)
+  getAllOrders: async (params = { page: 1, perPage: 100 }) => {
+    const response = await api.get('/orders/admin', { params });
     return response.data;
   },
 };

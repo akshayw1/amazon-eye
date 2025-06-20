@@ -5,9 +5,13 @@ const config = require('./config/config');
 const userRoutes = require('./routes/userRoutes');
 const productRoutes = require('./routes/productRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
+const orderRoutes = require('./routes/orderRoutes');
 
 const app = express();
 const prisma = new PrismaClient();
+
+// Trust proxy settings for proper IP detection
+app.set('trust proxy', true);
 
 // Middleware
 app.use(cors());
@@ -17,6 +21,7 @@ app.use(express.json());
 app.use('/api/users', userRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/reviews', reviewRoutes);
+app.use('/api/orders', orderRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -29,6 +34,7 @@ async function startServer() {
   try {
     await prisma.$connect();
     console.log('✨ Successfully connected to Prisma');
+    console.log('🌐 IP address detection is enabled');
     
     app.listen(config.PORT, () => {
       console.log(`🚀 Server is running on port ${config.PORT}`);

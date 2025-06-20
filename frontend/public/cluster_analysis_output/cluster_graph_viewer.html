@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amazon Eye - Cluster Analysis Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .view-toggle {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0056b3;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+
+        .btn.active {
+            background: #28a745;
+            transform: scale(1.05);
+        }
+
+        .info-panel {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .info-card {
+            flex: 1;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            text-align: center;
+            border-left: 4px solid #007bff;
+        }
+
+        .info-card h3 {
+            margin: 0 0 5px 0;
+            color: #333;
+        }
+
+        .info-card p {
+            margin: 0;
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        #graph-container {
+            width: 100%;
+            height: 600px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            position: relative;
+            background: #fafafa;
+        }
+
+        .tooltip {
+            position: absolute;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            border-radius: 8px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 1000;
+            max-width: 250px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .node {
+            cursor: pointer;
+            stroke-width: 2px;
+            transition: all 0.3s ease;
+        }
+
+        .node:hover {
+            stroke-width: 3px;
+            filter: brightness(1.2);
+        }
+
+        .link {
+            fill: none;
+            stroke: #ccc;
+            stroke-width: 1.5px;
+            opacity: 0.6;
+        }
+
+        .node-label {
+            font-size: 11px;
+            font-weight: bold;
+            fill: #333;
+            text-anchor: middle;
+            pointer-events: none;
+        }
+
+        .legend {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .legend h4 {
+            margin-top: 0;
+            color: #333;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .search-container {
+            margin-bottom: 20px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 18px;
+            color: #666;
+        }
+
+        .breadcrumb {
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 5px;
+        }
+
+        .breadcrumb a {
+            color: #007bff;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Amazon Eye</h1>
+        <p class="subtitle">Interactive Cluster Analysis & Product Trust Visualization</p>
+        
+        <div class="controls">
+            <div class="view-toggle">
+                <button class="btn btn-primary active" id="cluster-view">Cluster Overview</button>
+                <button class="btn btn-secondary" id="product-view" disabled>Product Details</button>
+            </div>
+            <div>
+                <button class="btn btn-secondary" id="reset-view">Reset View</button>
+            </div>
+        </div>
+
+        <div class="breadcrumb" id="breadcrumb" style="display: none;">
+            <span>Navigation: </span>
+            <a id="home-link">Clusters</a>
+            <span id="current-path"></span>
+        </div>
+
+        <div class="info-panel" id="info-panel">
+            <div class="info-card">
+                <h3>Total Clusters</h3>
+                <p id="total-clusters">-</p>
+            </div>
+            <div class="info-card">
+                <h3>Total Products</h3>
+                <p id="total-products">-</p>
+            </div>
+            <div class="info-card">
+                <h3>Fake Products</h3>
+                <p id="fake-products">-</p>
+            </div>
+            <div class="info-card">
+                <h3>Overall Risk</h3>
+                <p id="overall-risk">-</p>
+            </div>
+        </div>
+
+        <div class="search-container">
+            <input type="text" class="search-input" id="search-input" placeholder="Search clusters or products...">
+        </div>
+
+        <div id="graph-container">
+            <div class="loading" id="loading">Loading cluster data...</div>
+        </div>
+
+        <div class="legend" id="legend">
+            <h4>Risk Levels</h4>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #28a745;"></div>
+                <span>Low Risk (&lt; 5%)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #ffc107;"></div>
+                <span>Medium Risk (5-15%)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #dc3545;"></div>
+                <span>High Risk (&gt; 15%)</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let currentView = 'clusters';
+        let currentCluster = null;
+        let clusterData = [];
+        let productData = [];
+        let svg, g, simulation;
+        
+        // Initialize the visualization
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeVisualization();
+            loadClusterSummary();
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            document.getElementById('cluster-view').addEventListener('click', () => switchView('clusters'));
+            document.getElementById('product-view').addEventListener('click', () => switchView('products'));
+            document.getElementById('reset-view').addEventListener('click', resetView);
+            document.getElementById('home-link').addEventListener('click', resetView);
+            document.getElementById('search-input').addEventListener('input', handleSearch);
+        }
+
+        function initializeVisualization() {
+            const container = document.getElementById('graph-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            svg = d3.select('#graph-container')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height);
+
+            g = svg.append('g');
+
+            // Add zoom behavior
+            const zoom = d3.zoom()
+                .scaleExtent([0.1, 10])
+                .on('zoom', function(event) {
+                    g.attr('transform', event.transform);
+                });
+
+            svg.call(zoom);
+
+            // Add tooltip
+            d3.select('body').append('div')
+                .attr('class', 'tooltip')
+                .style('opacity', 0);
+        }
+
+        async function loadClusterSummary() {
+            try {
+                const data = await d3.csv('./cluster_summary.csv');
+                clusterData = data.map(d => ({
+                    ...d,
+                    cluster_id: +d.cluster_id,
+                    total_products: +d.total_products,
+                    fake_products: +d.fake_products,
+                    fake_percentage: +d.fake_percentage,
+                    avg_fake_score: +d.avg_fake_score
+                }));
+                
+                updateInfoPanel();
+                visualizeClusters();
+                document.getElementById('loading').style.display = 'none';
+            } catch (error) {
+                console.error('Error loading cluster data:', error);
+                document.getElementById('loading').textContent = 'Error loading data. Please check the CSV files.';
+            }
+        }
+
+        function updateInfoPanel() {
+            const totalClusters = clusterData.length;
+            const totalProducts = clusterData.reduce((sum, d) => sum + d.total_products, 0);
+            const totalFakeProducts = clusterData.reduce((sum, d) => sum + d.fake_products, 0);
+            const overallFakePercentage = ((totalFakeProducts / totalProducts) * 100).toFixed(2);
+            
+            document.getElementById('total-clusters').textContent = totalClusters;
+            document.getElementById('total-products').textContent = totalProducts.toLocaleString();
+            document.getElementById('fake-products').textContent = totalFakeProducts.toLocaleString();
+            document.getElementById('overall-risk').textContent = `${overallFakePercentage}%`;
+        }
+
+        function visualizeClusters() {
+            g.selectAll('*').remove();
+
+            const width = svg.node().clientWidth;
+            const height = svg.node().clientHeight;
+
+            // Create nodes
+            const nodes = clusterData.map(d => ({
+                id: d.cluster_id,
+                ...d,
+                x: width / 2 + (Math.random() - 0.5) * 200,
+                y: height / 2 + (Math.random() - 0.5) * 200
+            }));
+
+            // Create force simulation
+            simulation = d3.forceSimulation(nodes)
+                .force('charge', d3.forceManyBody().strength(-300))
+                .force('center', d3.forceCenter(width / 2, height / 2))
+                .force('collision', d3.forceCollide().radius(d => getNodeRadius(d.total_products) + 5));
+
+            // Create links (connect clusters based on similarity)
+            const links = createClusterLinks(nodes);
+
+            // Add links
+            const link = g.append('g')
+                .selectAll('line')
+                .data(links)
+                .enter().append('line')
+                .attr('class', 'link');
+
+            // Add nodes
+            const node = g.append('g')
+                .selectAll('circle')
+                .data(nodes)
+                .enter().append('circle')
+                .attr('class', 'node')
+                .attr('r', d => getNodeRadius(d.total_products))
+                .attr('fill', d => getRiskColor(d.fake_percentage))
+                .attr('stroke', d => d3.rgb(getRiskColor(d.fake_percentage)).darker())
+                .on('click', handleClusterClick)
+                .on('mouseover', showTooltip)
+                .on('mouseout', hideTooltip)
+                .call(d3.drag()
+                    .on('start', dragstarted)
+                    .on('drag', dragged)
+                    .on('end', dragended));
+
+            // Add labels
+            const labels = g.append('g')
+                .selectAll('text')
+                .data(nodes)
+                .enter().append('text')
+                .attr('class', 'node-label')
+                .text(d => `C${d.cluster_id}`)
+                .attr('dy', '.35em');
+
+            // Update positions on simulation tick
+            simulation.on('tick', () => {
+                link
+                    .attr('x1', d => d.source.x)
+                    .attr('y1', d => d.source.y)
+                    .attr('x2', d => d.target.x)
+                    .attr('y2', d => d.target.y);
+
+                node
+                    .attr('cx', d => d.x)
+                    .attr('cy', d => d.y);
+
+                labels
+                    .attr('x', d => d.x)
+                    .attr('y', d => d.y);
+            });
+        }
+
+        function createClusterLinks(nodes) {
+            const links = [];
+            // Connect clusters with similar risk levels
+            for (let i = 0; i < nodes.length; i++) {
+                for (let j = i + 1; j < nodes.length; j++) {
+                    const diff = Math.abs(nodes[i].fake_percentage - nodes[j].fake_percentage);
+                    if (diff < 2.0 && Math.random() < 0.3) { // Connect similar risk clusters
+                        links.push({source: nodes[i], target: nodes[j]});
+                    }
+                }
+            }
+            return links;
+        }
+
+        function getNodeRadius(totalProducts) {
+            return Math.max(8, Math.min(50, Math.sqrt(totalProducts) * 2));
+        }
+
+        function getRiskColor(fakePercentage) {
+            if (fakePercentage >= 15) return '#dc3545'; // High risk - Red
+            if (fakePercentage >= 5) return '#ffc107'; // Medium risk - Yellow
+            return '#28a745'; // Low risk - Green
+        }
+
+        function handleClusterClick(event, d) {
+            currentCluster = d.cluster_id;
+            loadClusterProducts(d.cluster_id);
+            updateBreadcrumb(`Cluster ${d.cluster_id}`);
+            switchView('products');
+        }
+
+        async function loadClusterProducts(clusterId) {
+            try {
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('loading').textContent = `Loading products from cluster ${clusterId}...`;
+                
+                const data = await d3.csv(`./cluster_${clusterId}_data.csv`);
+                productData = data.map(d => ({
+                    ...d,
+                    product_ID: +d.product_ID,
+                    cluster_ID: +d.cluster_ID,
+                    fake: +d.fake,
+                    fake_score: +d.fake_score,
+                    avg_review_rating: +d.avg_review_rating,
+                    n_of_reviews: +d.n_of_reviews
+                }));
+                
+                visualizeProducts();
+                document.getElementById('loading').style.display = 'none';
+            } catch (error) {
+                console.error('Error loading product data:', error);
+                document.getElementById('loading').textContent = 'Error loading product data.';
+            }
+        }
+
+        function visualizeProducts() {
+            g.selectAll('*').remove();
+
+            const width = svg.node().clientWidth;
+            const height = svg.node().clientHeight;
+
+            // Limit to reasonable number for visualization
+            const maxProducts = 1000;
+            const displayProducts = productData.slice(0, maxProducts);
+
+            // Create nodes for products
+            const nodes = displayProducts.map((d, i) => ({
+                id: d.product_ID,
+                ...d,
+                x: width / 2 + (Math.random() - 0.5) * 400,
+                y: height / 2 + (Math.random() - 0.5) * 400
+            }));
+
+            // Create force simulation
+            simulation = d3.forceSimulation(nodes)
+                .force('charge', d3.forceManyBody().strength(-50))
+                .force('center', d3.forceCenter(width / 2, height / 2))
+                .force('collision', d3.forceCollide().radius(8));
+
+            // Add nodes
+            const node = g.append('g')
+                .selectAll('circle')
+                .data(nodes)
+                .enter().append('circle')
+                .attr('class', 'node')
+                .attr('r', d => Math.max(3, Math.min(12, Math.sqrt(d.n_of_reviews) / 5)))
+                .attr('fill', d => d.fake ? '#dc3545' : '#28a745')
+                .attr('stroke', '#333')
+                .attr('stroke-width', 1)
+                .on('mouseover', showProductTooltip)
+                .on('mouseout', hideTooltip);
+
+            // Update positions on simulation tick
+            simulation.on('tick', () => {
+                node
+                    .attr('cx', d => d.x)
+                    .attr('cy', d => d.y);
+            });
+
+            if (productData.length > maxProducts) {
+                // Show message about limited display
+                g.append('text')
+                    .attr('x', width / 2)
+                    .attr('y', 30)
+                    .attr('text-anchor', 'middle')
+                    .attr('fill', '#666')
+                    .style('font-size', '14px')
+                    .text(`Showing first ${maxProducts} of ${productData.length} products`);
+            }
+        }
+
+        function showTooltip(event, d) {
+            const tooltip = d3.select('.tooltip');
+            tooltip.transition().duration(200).style('opacity', 1);
+            
+            const content = `
+                <strong>Cluster ${d.cluster_id}</strong><br/>
+                Products: ${d.total_products.toLocaleString()}<br/>
+                Fake Products: ${d.fake_products} (${d.fake_percentage}%)<br/>
+                Risk Level: ${d.risk_assessment}<br/>
+                Avg Rating: ${(+d.avg_review_rating).toFixed(2)}<br/>
+                Size: ${d.size_category}
+            `;
+            
+            tooltip.html(content)
+                .style('left', (event.pageX + 10) + 'px')
+                .style('top', (event.pageY - 10) + 'px');
+        }
+
+        function showProductTooltip(event, d) {
+            const tooltip = d3.select('.tooltip');
+            tooltip.transition().duration(200).style('opacity', 1);
+            
+            const content = `
+                <strong>Product ID: ${d.product_ID}</strong><br/>
+                Status: ${d.fake ? 'FAKE' : 'REAL'}<br/>
+                Fake Score: ${(+d.fake_score).toFixed(4)}<br/>
+                Rating: ${(+d.avg_review_rating).toFixed(2)}<br/>
+                Reviews: ${d.n_of_reviews}
+            `;
+            
+            tooltip.html(content)
+                .style('left', (event.pageX + 10) + 'px')
+                .style('top', (event.pageY - 10) + 'px');
+        }
+
+        function hideTooltip() {
+            d3.select('.tooltip').transition().duration(500).style('opacity', 0);
+        }
+
+        function switchView(view) {
+            const clusterBtn = document.getElementById('cluster-view');
+            const productBtn = document.getElementById('product-view');
+            
+            if (view === 'clusters') {
+                currentView = 'clusters';
+                clusterBtn.classList.add('active');
+                clusterBtn.classList.remove('btn-secondary');
+                clusterBtn.classList.add('btn-primary');
+                productBtn.classList.remove('active');
+                productBtn.classList.remove('btn-primary');
+                productBtn.classList.add('btn-secondary');
+                
+                visualizeClusters();
+                hideBreadcrumb();
+            } else if (view === 'products' && currentCluster !== null) {
+                currentView = 'products';
+                productBtn.classList.add('active');
+                productBtn.classList.remove('btn-secondary');
+                productBtn.classList.add('btn-primary');
+                clusterBtn.classList.remove('active');
+                clusterBtn.classList.remove('btn-primary');
+                clusterBtn.classList.add('btn-secondary');
+                
+                visualizeProducts();
+                showBreadcrumb();
+            }
+        }
+
+        function resetView() {
+            currentCluster = null;
+            switchView('clusters');
+        }
+
+        function updateBreadcrumb(path) {
+            document.getElementById('current-path').textContent = ` > ${path}`;
+        }
+
+        function showBreadcrumb() {
+            document.getElementById('breadcrumb').style.display = 'block';
+        }
+
+        function hideBreadcrumb() {
+            document.getElementById('breadcrumb').style.display = 'none';
+        }
+
+        function handleSearch(event) {
+            const searchTerm = event.target.value.toLowerCase();
+            
+            if (currentView === 'clusters') {
+                // Search clusters
+                g.selectAll('.node')
+                    .style('opacity', d => {
+                        return searchTerm === '' || 
+                               d.cluster_id.toString().includes(searchTerm) ||
+                               d.risk_assessment.toLowerCase().includes(searchTerm) ||
+                               d.size_category.toLowerCase().includes(searchTerm) ? 1 : 0.2;
+                    });
+            } else if (currentView === 'products') {
+                // Search products
+                g.selectAll('.node')
+                    .style('opacity', d => {
+                        return searchTerm === '' || 
+                               d.product_ID.toString().includes(searchTerm) ||
+                               (d.fake ? 'fake' : 'real').includes(searchTerm) ? 1 : 0.2;
+                    });
+            }
+        }
+
+        // Drag functions
+        function dragstarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+
+        function dragended(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+    </script>
+</body>
+</html>

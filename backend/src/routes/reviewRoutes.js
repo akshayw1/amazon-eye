@@ -1,15 +1,58 @@
 const express = require('express');
 const { PrismaClient } = require('../generated/prisma');
 const auth = require('../middleware/auth');
+const { getClientIpAddress } = require('../utils/ipUtils');
 
 const router = express.Router();
 const prisma = new PrismaClient();
+
+// Database protection middleware - prevent dangerous operations
+const preventDangerousOperations = (req, res, next) => {
+  const dangerousOperations = ['DELETE', 'TRUNCATE', 'DROP', 'RESET'];
+  const bodyString = JSON.stringify(req.body).toUpperCase();
+  const queryString = req.url.toUpperCase();
+  
+  for (const operation of dangerousOperations) {
+    if (bodyString.includes(operation) || queryString.includes(operation)) {
+      return res.status(403).json({ 
+        message: 'Database modification operations are not allowed',
+        error: 'OPERATION_BLOCKED'
+      });
+    }
+  }
+  next();
+};
+
+// Apply protection middleware to all routes
+router.use(preventDangerousOperations);
 
 // Create review
 router.post('/:productId', auth, async (req, res) => {
   try {
     const { rating, comment, title } = req.body;
     const productId = req.params.productId;
+    const clientIp = getClientIpAddress(req);
+
+    // Debug logging for IP address
+    console.log('🔍 Review submission debug info:');
+    console.log('  - Client IP:', clientIp);
+    console.log('  - Headers:', JSON.stringify({
+      'x-forwarded-for': req.headers['x-forwarded-for'],
+      'x-real-ip': req.headers['x-real-ip'],
+      'x-client-ip': req.headers['x-client-ip'],
+    }, null, 2));
+    console.log('  - Connection remote:', req.connection?.remoteAddress);
+    console.log('  - Socket remote:', req.socket?.remoteAddress);
+    console.log('  - req.ip:', req.ip);
+
+    // Validate input
+    if (!rating || !comment || !title) {
+      return res.status(400).json({ message: 'Rating, comment, and title are required' });
+    }
+
+    if (rating < 1 || rating > 5) {
+      return res.status(400).json({ message: 'Rating must be between 1 and 5' });
+    }
 
     // Check if product exists
     const product = await prisma.product.findUnique({
@@ -34,21 +77,39 @@ router.post('/:productId', auth, async (req, res) => {
       return res.status(400).json({ message: 'You have already reviewed this product' });
     }
 
+    const reviewData = {
+      reviewRating: rating,
+      reviewBody: comment,
+      reviewTitle: title,
+      reviewDate: new Date(),
+      reviewerId: req.user.id,
+      productId,
+      numberOfHelpful: 0,
+      isAiGenerated: false,
+      aiGeneratedScore: 0,
+      ipAddress: clientIp,
+    };
+
+    console.log('💾 Saving review to database with IP:', clientIp);
+
     const review = await prisma.reviewInfo.create({
-      data: {
-        reviewRating: rating,
-        reviewBody: comment,
-        reviewTitle: title || 'Review',
-        reviewDate: new Date(),
-        reviewerId: req.user.id,
-        productId,
-        numberOfHelpful: 0,
-        isAiGenerated: false,
-        aiGeneratedScore: 0,
-      },
+      data: reviewData,
     });
 
-    res.status(201).json(review);
+    console.log('✅ Review saved successfully with ID:', review.id, 'and IP:', review.ipAddress);
+
+    res.status(201).json({
+      message: 'Review created successfully',
+      review: {
+        id: review.id,
+        rating: review.reviewRating,
+        title: review.reviewTitle,
+        body: review.reviewBody,
+        date: review.reviewDate,
+        helpful: review.numberOfHelpful,
+        ipAddress: review.ipAddress // Include IP in response for debugging
+      }
+    });
   } catch (error) {
     console.error('Error creating review:', error);
     res.status(400).json({ message: 'Error creating review' });
