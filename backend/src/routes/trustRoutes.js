@@ -1,6 +1,7 @@
 const express = require('express');
 const { PrismaClient } = require('../generated/prisma');
-const { generateContent } = require('../utils/geminiAnalysis');
+const { generateContent, analyzeCallTranscript } = require('../utils/geminiAnalysis');
+const axios = require('axios');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -795,6 +796,470 @@ function getBurstRecommendations(bursts, burstScore) {
   }
   
   return recommendations;
+}
+
+// GET /api/trust/comprehensive/:productId - Comprehensive product trust analysis
+router.get('/comprehensive/:productId', async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const API_BASE_URL = `${req.protocol}://${req.get('host')}/api`;
+
+    console.log(`🔍 Starting comprehensive analysis for product: ${productId}`);
+
+    // Get basic product information with all fields
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      include: {
+        seller: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        _count: {
+          select: { reviewInfos: true }
+        }
+      }
+    });
+
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    console.log(`✅ Product found: ${product.name}`);
+
+    // Get reviews data
+    const reviews = await prisma.reviewInfo.findMany({
+      where: { productId },
+      select: {
+        id: true,
+        reviewRating: true,
+        numberOfHelpful: true,
+        reviewBody: true,
+        reviewTitle: true,
+        reviewDate: true,
+        reviewerId: true,
+        isAiGenerated: true,
+        aiGeneratedScore: true,
+        ipAddress: true
+      },
+      orderBy: { reviewDate: 'desc' }
+    });
+
+    console.log(`📝 Found ${reviews.length} reviews`);
+
+    // Get return requests for the product
+    const returnRequests = await prisma.returnRequest.findMany({
+      where: { productId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        order: {
+          select: {
+            id: true,
+            orderNumber: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    console.log(`🔄 Found ${returnRequests.length} return requests`);
+
+    // Parallel execution of trust analysis endpoints
+    const [ipAnalysis, editAnalysis, reviewSummary, returnAnalysis] = await Promise.allSettled([
+      // IP Pattern Analysis
+      axios.get(`${API_BASE_URL}/trust/analyze/${productId}`).catch(err => {
+        console.error('IP Analysis failed:', err.message);
+        return { data: { trustScore: 50, message: 'IP analysis unavailable' } };
+      }),
+      
+      // Edit History Analysis  
+      axios.get(`${API_BASE_URL}/trust/edit-history/${productId}`).catch(err => {
+        console.error('Edit Analysis failed:', err.message);
+        return { data: { editTrustScore: 100, message: 'Edit analysis unavailable' } };
+      }),
+      
+      // AI Review Summary Analysis
+      generateReviewSummaryScore(reviews, product),
+      
+      // Return Request Analysis
+      analyzeReturnRequests(returnRequests, product)
+    ]);
+
+    // Extract scores with fallbacks
+    const ipScore = ipAnalysis.status === 'fulfilled' 
+      ? (ipAnalysis.value.data.trustScore || 50) / 100 
+      : 0.50;
+    
+    const listingScore = editAnalysis.status === 'fulfilled' 
+      ? (editAnalysis.value.data.editTrustScore || 100) / 100 
+      : 1.00;
+      
+    const reviewCallAnalysis = reviewSummary.status === 'fulfilled' 
+      ? reviewSummary.value 
+      : { score: 0.50, summary: 'Review analysis unavailable' };
+
+    const returnAnalysisResult = returnAnalysis.status === 'fulfilled' 
+      ? returnAnalysis.value 
+      : { score: 1.00, summary: 'No return requests found', returnCount: 0 };
+
+    console.log(`📊 Scores calculated - IP: ${ipScore}, Listing: ${listingScore}, Review: ${reviewCallAnalysis.score}, Returns: ${returnAnalysisResult.score}`);
+
+    // Calculate overall fake score (inverse of trust scores) - now includes return analysis
+    const overallTrustScore = (ipScore + listingScore + reviewCallAnalysis.score + returnAnalysisResult.score) / 4;
+    const fakeScore = Math.round((1 - overallTrustScore) * 100) / 100;
+
+    // Format response according to the mock structure
+    const response = {
+      id: productId,
+      name: product.name,
+      description: product.description,
+      price: product.price.toString(),
+      images: product.images,
+      category: product.category,
+      product_ID: product.originalProductId || productId,
+      fake_score: fakeScore,
+      trust_score: product.trustScore || 0,
+      w_degree: reviews.length,
+      fake: fakeScore > 0.5,
+      IP_score: Math.round(ipScore * 100) / 100,
+      Listing_score: Math.round(listingScore * 100) / 100,
+      review_call_score: Math.round(reviewCallAnalysis.score * 100) / 100,
+      reviewcall_summary: reviewCallAnalysis.summary,
+      return_request_score: Math.round(returnAnalysisResult.score * 100) / 100,
+      return_summary: returnAnalysisResult.summary,
+      total_reviews: reviews.length,
+      total_returns: returnRequests.length,
+      seller_info: {
+        id: product.seller.id,
+        name: product.seller.name,
+        email: product.seller.email
+      },
+              analysis_details: {
+          ip_analysis: ipAnalysis.status === 'fulfilled' ? ipAnalysis.value.data : null,
+          edit_analysis: editAnalysis.status === 'fulfilled' ? editAnalysis.value.data : null,
+          review_analysis: reviewCallAnalysis.details || null,
+          return_analysis: returnAnalysisResult.details || null
+        },
+      reviews: reviews.slice(0, 10).map(review => ({
+        rating: review.reviewRating,
+        helpful_votes: review.numberOfHelpful,
+        review_text: review.reviewBody,
+        title: review.reviewTitle,
+        date: review.reviewDate.toISOString().split('T')[0],
+        reviewer_id: review.reviewerId,
+        ai_generated: review.isAiGenerated || false,
+        generated_score: review.aiGeneratedScore || 0,
+        ip_address: review.ipAddress || 'unknown'
+      })),
+      analyzedAt: new Date().toISOString()
+    };
+
+    console.log(`🎉 Comprehensive analysis completed for ${product.name}`);
+    res.json(response);
+
+  } catch (error) {
+    console.error('Error in comprehensive analysis:', error);
+    res.status(500).json({
+      message: 'Error performing comprehensive analysis',
+      error: error.message
+    });
+  }
+});
+
+// Helper function to generate review summary and score using AI
+async function generateReviewSummaryScore(reviews, product) {
+  try {
+    if (!reviews || reviews.length === 0) {
+      return {
+        score: 0.50,
+        summary: 'No reviews available for analysis',
+        details: { totalReviews: 0 }
+      };
+    }
+
+    // Format reviews for AI analysis
+    const formattedReviews = reviews.slice(0, 20).map((review, index) => `
+REVIEW ${index + 1}:
+Rating: ${review.reviewRating}/5
+Title: ${review.reviewTitle}
+Text: ${review.reviewBody}
+Date: ${review.reviewDate}
+AI Generated: ${review.isAiGenerated ? 'Yes' : 'No'}
+AI Score: ${review.aiGeneratedScore || 0}
+---`).join('\n');
+
+    const prompt = `
+Analyze the following product reviews and provide a trust score (0.0-1.0) and summary for "${product.name}".
+
+PRODUCT: ${product.name}
+CATEGORY: ${product.category}
+TOTAL REVIEWS: ${reviews.length}
+
+SAMPLE REVIEWS:
+${formattedReviews}
+
+ANALYSIS REQUIREMENTS:
+1. Calculate a trust score from 0.0 (completely fake/manipulated) to 1.0 (highly authentic)
+2. Consider factors like:
+   - Review authenticity patterns
+   - Sentiment consistency
+   - Common complaints vs praise
+   - Signs of fake reviews (AI generated, generic content)
+   - Overall product satisfaction trends
+
+3. Provide a concise summary (2-3 sentences) highlighting key findings about customer experience
+
+Please respond in this exact JSON format:
+{
+  "score": [0.0-1.0],
+  "summary": "Brief summary of review analysis findings",
+  "key_insights": [
+    "insight 1",
+    "insight 2"
+  ],
+  "authenticity_indicators": {
+    "genuine_reviews_ratio": [0.0-1.0],
+    "common_complaints": ["complaint1", "complaint2"],
+    "common_praise": ["praise1", "praise2"]
+  }
+}
+`;
+
+    const aiResponse = await generateContent(prompt, {
+      model: 'gemini-2.0-flash',
+      temperature: 0.4,
+      maxOutputTokens: 1024
+    });
+
+    // Parse AI response
+    try {
+      const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return {
+          score: Math.max(0, Math.min(1, parsed.score || 0.5)),
+          summary: parsed.summary || 'Review analysis completed',
+          details: parsed
+        };
+      }
+    } catch (parseError) {
+      console.error('Error parsing AI review analysis:', parseError);
+    }
+
+    // Fallback scoring based on simple metrics
+    const avgRating = reviews.reduce((sum, r) => sum + r.reviewRating, 0) / reviews.length;
+    const aiGeneratedRatio = reviews.filter(r => r.isAiGenerated).length / reviews.length;
+    const fallbackScore = Math.max(0.1, Math.min(0.9, 
+      (avgRating / 5) * 0.6 + // Rating contribution (60%)
+      (1 - aiGeneratedRatio) * 0.4 // Authenticity contribution (40%)
+    ));
+
+    return {
+      score: fallbackScore,
+      summary: `Product has ${reviews.length} reviews with average rating ${avgRating.toFixed(1)}/5. Analysis based on review patterns and authenticity indicators.`,
+      details: {
+        fallback: true,
+        avgRating,
+        aiGeneratedRatio,
+        totalReviews: reviews.length
+      }
+    };
+
+  } catch (error) {
+    console.error('Error in review summary generation:', error);
+    return {
+      score: 0.50,
+      summary: 'Review analysis failed - neutral score assigned',
+      details: { error: error.message }
+    };
+  }
+}
+
+// Helper function to analyze return requests and call transcripts
+async function analyzeReturnRequests(returnRequests, product) {
+  try {
+    if (!returnRequests || returnRequests.length === 0) {
+      return {
+        score: 1.00, // Perfect score for no returns
+        summary: 'No return requests found - indicates good product quality',
+        returnCount: 0,
+        details: {
+          totalReturns: 0,
+          returnRate: 0,
+          commonReasons: [],
+          callAnalyses: []
+        }
+      };
+    }
+
+    console.log(`🔄 Analyzing ${returnRequests.length} return requests...`);
+
+    // Analyze call transcripts from return requests
+    const callAnalyses = [];
+    const returnReasons = [];
+    let qualityIssueCount = 0;
+    let processedCallCount = 0;
+
+    for (const returnReq of returnRequests) {
+      returnReasons.push(returnReq.reason);
+      
+      // Check for quality-related issues
+      const qualityKeywords = ['defective', 'broken', 'poor quality', 'damaged', 'fake', 'not as described', 'different from picture'];
+      if (qualityKeywords.some(keyword => 
+        returnReq.reason.toLowerCase().includes(keyword) || 
+        returnReq.description?.toLowerCase().includes(keyword) ||
+        returnReq.title.toLowerCase().includes(keyword)
+      )) {
+        qualityIssueCount++;
+      }
+
+      // Analyze call transcript if available
+      if (returnReq.transcript && Array.isArray(returnReq.transcript) && returnReq.transcript.length > 0) {
+        try {
+          const callAnalysis = await analyzeCallTranscript(returnReq.transcript, {
+            productName: product.name,
+            returnReason: returnReq.reason,
+            orderNumber: returnReq.order?.orderNumber
+          });
+          
+          callAnalyses.push({
+            returnId: returnReq.id,
+            analysis: callAnalysis,
+            reason: returnReq.reason,
+            status: returnReq.status
+          });
+          processedCallCount++;
+        } catch (error) {
+          console.error(`Error analyzing call transcript for return ${returnReq.id}:`, error.message);
+        }
+      }
+    }
+
+    // Calculate return-based metrics
+    const returnRate = returnRequests.length; // Absolute count for scoring
+    const qualityIssueRatio = returnRequests.length > 0 ? qualityIssueCount / returnRequests.length : 0;
+    
+    // Count return reason frequencies
+    const reasonCounts = {};
+    returnReasons.forEach(reason => {
+      reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+    });
+    const commonReasons = Object.entries(reasonCounts)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 3)
+      .map(([reason, count]) => ({ reason, count }));
+
+    // Generate AI analysis of return patterns
+    const returnAnalysisPrompt = `
+Analyze the following return request patterns for product "${product.name}" and provide a trust score (0.0-1.0).
+
+RETURN REQUEST DATA:
+- Total Returns: ${returnRequests.length}
+- Quality Issues: ${qualityIssueCount} (${Math.round(qualityIssueRatio * 100)}%)
+- Call Transcripts Analyzed: ${processedCallCount}
+
+RETURN REASONS:
+${returnReasons.map((reason, i) => `${i+1}. ${reason}`).join('\n')}
+
+CALL ANALYSES SUMMARY:
+${callAnalyses.map(ca => `- ${ca.reason}: ${ca.analysis.substring(0, 200)}...`).join('\n')}
+
+SCORING CRITERIA:
+- 0.9-1.0: Very few returns, mostly normal reasons (size, color preference)
+- 0.7-0.9: Some returns but legitimate reasons, good customer service
+- 0.5-0.7: Moderate return rate with some quality concerns
+- 0.3-0.5: High return rate with quality issues and customer complaints
+- 0.0-0.3: Excessive returns with serious quality problems and poor service
+
+Please respond in JSON format:
+{
+  "score": [0.0-1.0],
+  "summary": "Brief summary of return analysis findings",
+  "risk_factors": [
+    "factor 1",
+    "factor 2"
+  ],
+  "recommendations": [
+    "recommendation 1",
+    "recommendation 2"
+  ]
+}
+`;
+
+    let aiAnalysisResult;
+    try {
+      const aiResponse = await generateContent(returnAnalysisPrompt, {
+        model: 'gemini-2.0-flash',
+        temperature: 0.3,
+        maxOutputTokens: 1024
+      });
+
+      const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        aiAnalysisResult = JSON.parse(jsonMatch[0]);
+      }
+    } catch (error) {
+      console.error('Error in AI return analysis:', error);
+    }
+
+    // Fallback scoring if AI analysis fails
+    let finalScore = 1.0;
+    let summary = 'Return request analysis completed';
+
+    if (aiAnalysisResult) {
+      finalScore = Math.max(0, Math.min(1, aiAnalysisResult.score));
+      summary = aiAnalysisResult.summary;
+    } else {
+      // Simple fallback scoring
+      if (returnRequests.length === 0) finalScore = 1.0;
+      else if (returnRequests.length <= 2) finalScore = 0.9;
+      else if (returnRequests.length <= 5) finalScore = 0.7;
+      else if (returnRequests.length <= 10) finalScore = 0.5;
+      else finalScore = 0.3;
+
+      // Reduce score for quality issues
+      finalScore *= (1 - (qualityIssueRatio * 0.3));
+      finalScore = Math.max(0.1, finalScore);
+
+      summary = `${returnRequests.length} return requests found with ${qualityIssueCount} quality-related issues. ${processedCallCount} call transcripts analyzed.`;
+    }
+
+    return {
+      score: finalScore,
+      summary,
+      returnCount: returnRequests.length,
+      details: {
+        totalReturns: returnRequests.length,
+        qualityIssueCount,
+        qualityIssueRatio: Math.round(qualityIssueRatio * 100) / 100,
+        processedCallCount,
+        commonReasons,
+        callAnalyses: callAnalyses.slice(0, 5), // Include up to 5 call analyses
+        aiAnalysis: aiAnalysisResult || null,
+        returnStatuses: returnRequests.reduce((acc, req) => {
+          acc[req.status] = (acc[req.status] || 0) + 1;
+          return acc;
+        }, {})
+      }
+    };
+
+  } catch (error) {
+    console.error('Error analyzing return requests:', error);
+    return {
+      score: 0.50,
+      summary: 'Return request analysis failed - neutral score assigned',
+      returnCount: returnRequests?.length || 0,
+      details: { error: error.message }
+    };
+  }
 }
 
 module.exports = router; 
