@@ -1,129 +1,181 @@
-<div align="center">
+# Amazon Hackathon: Advanced Trust & Fraud Detection System
 
-# 👁️ Amazon Eye
-## AI-Powered Trust & Safety Platform
+## 🏆 Project Overview
 
-### 🏆 Amazon Hackathon 2025 - Theme 2 Submission
-**Team:** Akshay Waghmare, Jot Singh Bindra
+This project was developed for the Amazon India Hackathon with the theme "Advanced Trust Increase by Fraud Detection". The system implements a comprehensive multi-modal approach to detect fraudulent activities, counterfeit products, and maintain product lifecycle integrity on e-commerce platforms.
+
+## 🎯 Problem Statement
+
+E-commerce platforms face multiple trust challenges:
+- **Review Fraud**: Fake reviews manipulating product ratings
+- **AI-Generated Content**: Automated spam reviews
+- **Counterfeit Products**: Misleading product images and descriptions
+- **Deceptive Listings**: Mismatched product images and descriptions
+- **Product Identity Fraud**: Subtle visual manipulations
+
+## 🚀 Solution Architecture
+
+Our system employs 6 distinct AI-powered features working in tandem to create a robust trust framework:
+
+### 🔹 Feature 1: Fake Product Detection via Review Behavior & Network Patterns
+
+**Objective**: Detect products involved in fake review campaigns using graph-based network analysis.
+
+**Methodology**:
+- Engineered review-based features (avg rating, review gaps, 1-star/5-star ratio, helpful votes)
+- Constructed bipartite reviewer-product graphs and projected to product-product similarity networks
+- Calculated network centrality measures: PageRank, eigenvector centrality, clustering coefficient
+- Trained RandomForestClassifier on 3,400 labeled Amazon products
+- Applied K-Means clustering (k=20) on 64K unlabeled UCSD products for fraud-prone segment identification
+
+**Key Innovation**: Detects review fraud without relying on textual or visual content analysis.
+
+**Files**:
+- `src/NetworkFeatures/feature_extraction.py` - Bipartite graph construction and metrics
+- `src/NetworkFeatures/clustering_pipeline.py` - Clustering and prediction pipeline
+- `src/NetworkFeatures/classifiers.py` - RandomForest training and evaluation
+- `src/NetworkFeatures/run_pipeline.py` - Complete pipeline execution
+
+![Network Analysis Results](ClusterNetworkAnalysis.png)
+
+### 🔹 Feature 2: AI-Written Review Detection using RoBERTa
+
+**Objective**: Identify AI-generated reviews to combat automated spam and fabricated feedback.
+
+**Methodology**:
+- Fine-tuned `roberta-base` model using HuggingFace Trainer
+- Binary classification: AI-generated (1) vs Human-written (0)
+- Deployed as REST API for real-time inference
+
+**Impact**: Provides new trust signal based on AI-generated content percentage.
+
+**Files**:
+- `src/ReviewFeatures/train.py` - RoBERTa fine-tuning pipeline
+- `src/ReviewFeatures/app.py` - Flask API endpoint `/check_ai_review`
+
+### 🔹 Feature 3: Image-Description Matching using CLIP
+
+**Objective**: Verify alignment between product images and textual descriptions.
+
+**Methodology**:
+- Utilized `openai/clip-vit-base-patch32` model
+- Encoded images with CLIP vision encoder
+- Encoded combined text (title + description) with CLIP text encoder
+- Calculated cosine similarity between embeddings
+- Flagged products below similarity threshold
+
+**Use Case**: Detects deceptive listings with misleading product images.
+
+**Files**:
+- `src/ImageDescriptionMatching/train.py` - Image-text embedding generation
+- `src/ImageDescriptionMatching/app.py` - Similarity check API endpoint
+- `src/ImageDescriptionMatching/dataloader.py` - Dataset loading utilities
+
+![CLIP Image-Description Matching Example](ClipImageDescriptionExample.png)
+
+![CLIP Loss During Training](ClipLoss.png)
+
+### 🔹 Feature 4: Image-Image Matching (Seller vs Reference)
+
+**Objective**: Compare seller-uploaded images against verified reference images.
+
+**Methodology**:
+- Created labeled dataset of positive/negative image pairs
+- Used CLIP vision encoder for embedding extraction
+- Trained 2-layer fully connected classifier on similarity scores
+- Binary prediction: Match (1) vs Mismatch (0)
+
+**Application**: Identifies counterfeit listings with doctored or incorrect product photos.
+
+**Files**:
+- `src/ImageImageMatching/train.py` - Pairwise training implementation
+- `src/ImageImageMatching/app.py` - Image matching API endpoint
+- `src/ImageImageMatching/dataloader.py` - Image pair dataset loader
+
+### 🔹 Feature 5: Visual Identity Learning with Barlow Twins
+
+**Objective**: Self-supervised learning of product visual identity for counterfeit detection.
+
+**Methodology**:
+- ResNet18 backbone with MLP projection head
+- Barlow Twins loss function for representation learning
+- Enforced similarity between augmentations while maintaining disentanglement
+- Cosine distance comparison for identity drift detection
+
+**Advantage**: Operates without labeled counterfeit data using embedding-based anomaly detection.
+
+**Files**:
+- `AnalysisNotebooks/BarlowTwins(1).ipynb` - Barlow Twins implementation
+- Self-supervised training pipeline
+
+![Barlow Twins Loss Convergence](BarlowTwinsLoss.png)
+
+### 🔹 Feature 6: Product Anomaly Detection via ViT-MAE
+
+**Objective**: Transformer-based masked autoencoding for structural anomaly detection.
+
+**Methodology**:
+- Fine-tuned `facebook/vit-mae-base` model
+- Trained to reconstruct masked patches from genuine product images
+- Anomaly detection through reconstruction loss analysis
+- Identifies poor reconstructions indicating counterfeit/tampered products
+
+**Capability**: Detects subtle packaging forgeries and design inconsistencies.
+
+**Files**:
+- `AnalysisNotebooks/ViT_MaE.ipynb` - Vision Transformer MAE implementation
+
+![ViT-MAE Masking Strategy](Vit-Mae-Masking.png)
+
+![ViT-MAE Loss During Training](VitMaeLoss.png)
+
+## 📊 Additional Analysis Components
+
+### Trust Agent
+- `trust_agent/app.py` - Trust scoring aggregation service
+- `trust_agent/expected_response.json` - Response format specifications
+
+### Trust Score API
+- `trust_score/app.py` - Trust score calculation service
+- `trust_score/test_api.py` - API testing suite
+- `trust_score/mock_server.py` - Development testing server
+
+## 🛠️ Technical Stack
+
+- **Deep Learning**: PyTorch, HuggingFace Transformers
+- **Computer Vision**: CLIP, Vision Transformer (ViT), ResNet
+- **NLP**: RoBERTa, Transformer models
+- **Graph Analysis**: NetworkX, custom graph algorithms
+- **Machine Learning**: Scikit-learn, RandomForest, K-Means
+- **API Framework**: Flask
+- **Data Processing**: Pandas, NumPy
+
+## 📈 Key Innovations
+
+1. **Multi-Modal Approach**: Combines text, image, and network analysis
+2. **Graph-Based Fraud Detection**: Novel application of network centrality for review fraud
+3. **Self-Supervised Learning**: Reduces dependency on labeled counterfeit data
+4. **Real-Time API Integration**: Production-ready endpoints for live deployment
+5. **Comprehensive Trust Framework**: End-to-end solution covering multiple fraud vectors
+
+## 🎯 Impact & Applications
+
+- **E-commerce Platforms**: Enhanced product authenticity verification
+- **Marketplace Trust**: Improved buyer confidence through multi-layered validation
+- **Fraud Prevention**: Proactive detection of sophisticated fraud schemes
+- **Product Lifecycle Management**: Continuous monitoring of product integrity
+
+## 🚀 Future Enhancements
+
+- Integration with blockchain for immutable trust records
+- Real-time graph updates for dynamic fraud detection
+- Advanced ensemble methods combining all features
+- Mobile app integration for consumer-facing trust scores
+
+## 📞 Contact
+
+This project demonstrates cutting-edge AI applications in e-commerce trust and fraud detection, showcasing the potential for comprehensive marketplace integrity solutions.
 
 ---
 
-[![Live Demo](https://img.shields.io/badge/🚀_Live_Demo-Visit_Platform-FF9900?style=for-the-badge)](http://88.99.104.97:5173/)
-
----
-
-## 🎯 **About Amazon Eye**
-
-Amazon Eye is an **AI-powered e-commerce trust and safety platform** that revolutionizes online shopping security. Our platform combines advanced AI algorithms with real-time analysis to detect fraudulent activities, verify product authenticity, and ensure customer safety.
-
-### **🌟 Key Features:**
-- 🔍 **AI-Powered Trust Analysis** - Real-time product and seller verification
-- 🛡️ **Fraud Detection** - Advanced algorithms to identify suspicious activities  
-- 📊 **Network Analysis** - Cluster-based security assessment
-- 🤖 **Automated Customer Service** - AI-driven call handling and support
-- 👨‍💼 **Admin Dashboard** - Comprehensive platform management tools
-
----
-
-## 🚀 **Live Demo**
-
-**🌐 Experience Amazon Eye:** [http://88.99.104.97:5173/](http://88.99.104.97:5173/)
-
-Try out our live platform to see AI-powered trust analysis in action!
-
----
-
-## 🛠️ **Local Setup**
-
-### **Prerequisites**
-- Node.js 18+
-- PostgreSQL 13+
-- Git
-
-### **Quick Start**
-
-1. **Clone the repository:**
-```bash
-git clone https://github.com/your-repo/amazon-eye.git
-cd amazon-eye
-```
-
-2. **Setup Backend:**
-```bash
-cd backend
-npm install
-cp .env.example .env  # Configure your database URL and API keys
-npx prisma migrate dev
-npx prisma generate
-npm run dev
-```
-
-3. **Setup Frontend:**
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-4. **Access the Application:**
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:3000
-
-### **Environment Variables**
-```env
-# Backend (.env)
-DATABASE_URL="postgresql://username:password@localhost:5432/amazon_eye"
-JWT_SECRET="your-secret-key"
-GEMINI_API_KEY="your-gemini-api-key"
-
-# Frontend (.env)
-VITE_API_URL="http://localhost:3000/api"
-```
-
----
-
-## 📁 **Project Structure**
-
-```
-amazon-eye/
-├── frontend/          # React.js application
-├── backend/           # Node.js API server
-├── calling-engine/    # Outbound calling service
-├── extension/         # Browser extension
-└── cluster_analysis_output/  # Trust analysis data
-```
-
----
-
-## 🔧 **Tech Stack**
-
-- **Frontend:** React.js, Vite, Tailwind CSS
-- **Backend:** Node.js, Express.js, Prisma ORM
-- **Database:** PostgreSQL
-- **AI:** Google Gemini 2.0 Flash
-- **Deployment:** Docker, Cloud hosting
-
----
-
-## 👥 **Team**
-
-| **Name** | **Role** |
-|----------|----------|
-| **Akshay Waghmare** | Full-Stack Developer & Backend Architect |
-| **Jot Singh Bindra** | Frontend Developer & UI/UX Designer |
-
----
-
-## 📄 **License**
-
-This project is licensed under the MIT License.
-
----
-
-<div align="center">
-
-**Built with ❤️ for Amazon Hackathon 2025**
-
-[![Visit Live Demo](https://img.shields.io/badge/🚀_Try_Now-Live_Platform-FF9900?style=for-the-badge&logo=amazon)](http://88.99.104.97:5173/)
-
-</div>
+*Developed for Amazon India Hackathon - Advanced Trust & Fraud Detection Theme*
