@@ -26,6 +26,41 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
+// Get product by original product ID
+router.get('/by-original-id/:originalId', async (req, res) => {
+  try {
+    const originalProductId = parseInt(req.params.originalId);
+    
+    if (isNaN(originalProductId)) {
+      return res.status(400).json({ message: 'Invalid original product ID' });
+    }
+
+    const product = await prisma.product.findFirst({
+      where: { originalProductId },
+      include: {
+        seller: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        _count: {
+          select: { reviewInfos: true }
+        }
+      },
+    });
+
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    res.json(product);
+  } catch (error) {
+    console.error('Error fetching product by original ID:', error);
+    res.status(400).json({ message: 'Error fetching product' });
+  }
+});
+
 // Get all products with pagination
 router.get('/', async (req, res) => {
   try {
@@ -39,7 +74,9 @@ router.get('/', async (req, res) => {
       ...(search && {
         OR: [
           { name: { contains: search, mode: 'insensitive' } },
-          { description: { contains: search, mode: 'insensitive' } }
+          { description: { contains: search, mode: 'insensitive' } },
+          // Search by original product ID if search is numeric
+          ...(isNaN(parseInt(search)) ? [] : [{ originalProductId: parseInt(search) }])
         ]
       })
     };

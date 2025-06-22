@@ -1,0 +1,16 @@
+{
+  "name": "amazon-eye-ip-simulator",
+  "version": "1.0.0",
+  "description": "Script to simulate IP address patterns for Amazon Eye reviews to demonstrate trust factor",
+  "main": "simulate_ip_patterns.js",
+  "scripts": {
+    "simulate": "node simulate_ip_patterns.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "csv-parser": "^3.0.0"
+  },
+  "keywords": ["amazon-eye", "simulation", "trust-factor", "ip-patterns"],
+  "author": "Amazon Eye Team",
+  "license": "MIT"
+} 

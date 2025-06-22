@@ -15,7 +15,7 @@ A comprehensive e-commerce platform with advanced features including AI-powered 
 - **AI Call Analysis**: Google Gemini-powered call transcript analysis
 - **Product Edit History**: Complete audit trail of all product changes
 - **Trust Scoring**: AI-powered product and seller trust analysis
-- **Network Visualization**: Interactive trust network graphs
+- **Network Visualization**: Interact   ive trust network graphs
 
 ### Technical Features
 - **Database Backup/Restore**: Comprehensive data protection system

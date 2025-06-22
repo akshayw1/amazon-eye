@@ -213,4 +213,41 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
+// Public endpoint to update review IP address (for testing trust factor)
+router.put('/:id/ip', async (req, res) => {
+  try {
+    const { ipAddress } = req.body;
+    
+    if (!ipAddress) {
+      return res.status(400).json({ message: 'IP address is required' });
+    }
+
+    const review = await prisma.reviewInfo.findUnique({
+      where: { id: req.params.id },
+    });
+
+    if (!review) {
+      return res.status(404).json({ message: 'Review not found' });
+    }
+
+    const updatedReview = await prisma.reviewInfo.update({
+      where: { id: req.params.id },
+      data: {
+        ipAddress: ipAddress,
+      },
+    });
+
+    res.json({
+      message: 'Review IP address updated successfully',
+      review: {
+        id: updatedReview.id,
+        ipAddress: updatedReview.ipAddress,
+      }
+    });
+  } catch (error) {
+    console.error('Error updating review IP address:', error);
+    res.status(400).json({ message: 'Error updating review IP address' });
+  }
+});
+
 module.exports = router; 
