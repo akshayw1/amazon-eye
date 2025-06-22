@@ -1,0 +1,28 @@
+
+Amazon Eye Database Backup Summary
+=================================
+Date: 6/22/2025, 2:33:01 PM
+Backup File: amazon_eye_backup_2025-06-22T09-03-00-220Z.json
+File Size: 49.36 MB
+
+Records Count:
+- Users: 6
+- Products: 120
+- Reviews: 15178
+- Orders: 4
+- Order Items: 4
+- Return Requests: 3
+- Product Edit History: 7
+
+Total Records: 15322
+
+Features Included:
+✅ User accounts and authentication data
+✅ Product listings with seller information
+✅ Customer reviews and ratings
+✅ Order management system
+✅ Return request system with call tracking
+✅ Product edit history with audit trail
+✅ AI call analysis summaries
+
+To restore this backup, use the restore_database.js script.
