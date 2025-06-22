@@ -2,9 +2,26 @@ const express = require('express');
 const { PrismaClient } = require('../generated/prisma');
 const auth = require('../middleware/auth');
 const { getClientIpAddress } = require('../utils/ipUtils');
+const { verifyProductImage } = require('../utils/imageVerification');
+const multer = require('multer');
 
 const router = express.Router();
 const prisma = new PrismaClient();
+
+// Configure multer for image upload
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  },
+});
 
 // Database protection middleware - prevent dangerous operations
 const preventDangerousOperations = (req, res, next) => {
@@ -26,44 +43,83 @@ const preventDangerousOperations = (req, res, next) => {
 // Apply protection middleware to all routes
 router.use(preventDangerousOperations);
 
-// Create review
-router.post('/:productId', auth, async (req, res) => {
+// Create review with image verification
+router.post('/:productId', auth, upload.single('reviewerImage'), async (req, res) => {
   try {
     const { rating, comment, title } = req.body;
     const productId = req.params.productId;
     const clientIp = getClientIpAddress(req);
+    const reviewerImage = req.file;
 
-    // Debug logging for IP address
+    // Debug logging for request data
     console.log('🔍 Review submission debug info:');
-    console.log('  - Client IP:', clientIp);
-    console.log('  - Headers:', JSON.stringify({
-      'x-forwarded-for': req.headers['x-forwarded-for'],
-      'x-real-ip': req.headers['x-real-ip'],
-      'x-client-ip': req.headers['x-client-ip'],
-    }, null, 2));
-    console.log('  - Connection remote:', req.connection?.remoteAddress);
-    console.log('  - Socket remote:', req.socket?.remoteAddress);
-    console.log('  - req.ip:', req.ip);
+    console.log('  - Product ID:', productId);
+    console.log('  - Raw rating:', rating, typeof rating);
+    console.log('  - Comment:', comment, typeof comment);
+    console.log('  - Title:', title, typeof title);
+    console.log('  - User ID:', req.user?.id);
+    console.log('  - Has image:', !!reviewerImage);
 
-    // Validate input
-    if (!rating || !comment || !title) {
-      return res.status(400).json({ message: 'Rating, comment, and title are required' });
+    // Parse rating as integer
+    const parsedRating = parseInt(rating, 10);
+    console.log('  - Parsed rating:', parsedRating, typeof parsedRating);
+
+    // Validate input with better checks
+    if (isNaN(parsedRating) || parsedRating === 0) {
+      console.log('❌ Rating validation failed:', parsedRating);
+      return res.status(400).json({ message: 'Rating is required and must be a valid number' });
     }
 
-    if (rating < 1 || rating > 5) {
+    if (!comment || comment.trim() === '') {
+      console.log('❌ Comment validation failed:', comment);
+      return res.status(400).json({ message: 'Comment is required and cannot be empty' });
+    }
+
+    if (!title || title.trim() === '') {
+      console.log('❌ Title validation failed:', title);
+      return res.status(400).json({ message: 'Title is required and cannot be empty' });
+    }
+
+    if (parsedRating < 1 || parsedRating > 5) {
+      console.log('❌ Rating range validation failed:', parsedRating);
       return res.status(400).json({ message: 'Rating must be between 1 and 5' });
     }
 
-    // Check if product exists
+    // Check if product exists and get its first image
     const product = await prisma.product.findUnique({
       where: { id: productId },
+      select: {
+        id: true,
+        images: true,
+      },
     });
 
     if (!product) {
+      console.log('❌ Product not found:', productId);
       return res.status(404).json({ message: 'Product not found' });
     }
 
-    // Check if user has already reviewed this product (based on reviewerId)
+    console.log('✅ Product found:', product.id);
+
+    // Initialize image verification data
+    let imageVerificationData = null;
+
+    // If reviewer uploaded an image and product has images, verify authenticity
+    if (reviewerImage && product.images && product.images.length > 0) {
+      try {
+        console.log('🖼️ Starting image verification...');
+        imageVerificationData = await verifyProductImage(
+          product.images[0], // Use first product image
+          reviewerImage.buffer
+        );
+        console.log('✅ Image verification completed:', imageVerificationData);
+      } catch (error) {
+        console.error('❌ Image verification failed:', error);
+        // Continue without image verification if it fails
+      }
+    }
+
+    // Check if user has already reviewed this product
     const existingReview = await prisma.reviewInfo.findFirst({
       where: {
         AND: [
@@ -74,13 +130,14 @@ router.post('/:productId', auth, async (req, res) => {
     });
 
     if (existingReview) {
+      console.log('❌ User already reviewed this product:', req.user.id, productId);
       return res.status(400).json({ message: 'You have already reviewed this product' });
     }
 
     const reviewData = {
-      reviewRating: rating,
-      reviewBody: comment,
-      reviewTitle: title,
+      reviewRating: parsedRating,
+      reviewBody: comment.trim(),
+      reviewTitle: title.trim(),
       reviewDate: new Date(),
       reviewerId: req.user.id,
       productId,
@@ -88,15 +145,24 @@ router.post('/:productId', auth, async (req, res) => {
       isAiGenerated: false,
       aiGeneratedScore: 0,
       ipAddress: clientIp,
+      // Add image verification data if available
+      ...(imageVerificationData && {
+        reviewerImage: reviewerImage ? reviewerImage.buffer.toString('base64') : null,
+        imageAuthScore: imageVerificationData.authenticity_score,
+        imageAnalysis: imageVerificationData.analysis,
+      }),
     };
 
-    console.log('💾 Saving review to database with IP:', clientIp);
+    console.log('💾 Saving review to database:', {
+      ...reviewData,
+      reviewerImage: reviewData.reviewerImage ? '[base64 data]' : null
+    });
 
     const review = await prisma.reviewInfo.create({
       data: reviewData,
     });
 
-    console.log('✅ Review saved successfully with ID:', review.id, 'and IP:', review.ipAddress);
+    console.log('✅ Review saved successfully with ID:', review.id);
 
     res.status(201).json({
       message: 'Review created successfully',
@@ -107,12 +173,19 @@ router.post('/:productId', auth, async (req, res) => {
         body: review.reviewBody,
         date: review.reviewDate,
         helpful: review.numberOfHelpful,
-        ipAddress: review.ipAddress // Include IP in response for debugging
+        ipAddress: review.ipAddress,
+        imageAuthScore: review.imageAuthScore,
+        imageAnalysis: review.imageAnalysis,
       }
     });
   } catch (error) {
-    console.error('Error creating review:', error);
-    res.status(400).json({ message: 'Error creating review' });
+    console.error('❌ Error creating review:', error);
+    console.error('Error stack:', error.stack);
+    res.status(400).json({ 
+      message: 'Error creating review', 
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 

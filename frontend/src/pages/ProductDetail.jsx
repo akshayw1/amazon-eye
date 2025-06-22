@@ -43,6 +43,7 @@ import {
   Plus,
   ShoppingCart
 } from 'lucide-react';
+import TrustAgent from '../components/TrustAgent';
 
 const ProductDetailPage = () => {
   const { id } = useParams();
@@ -184,7 +185,11 @@ const ProductDetailPage = () => {
         authentic: !review.isAiGenerated, // Non-AI generated reviews are authentic
         helpful: review.numberOfHelpful || 0,
         aiGenerated: review.isAiGenerated || false,
-        aiScore: review.aiGeneratedScore || 0
+        aiScore: review.aiGeneratedScore || 0,
+        // Add image data
+        reviewerImage: review.reviewerImage,
+        imageAuthScore: review.imageAuthScore,
+        imageAnalysis: review.imageAnalysis
       })) || [];
 
       setReviews(mappedReviews);
@@ -556,6 +561,67 @@ const ProductDetailPage = () => {
                     <p className="text-red-500 text-sm text-center">Out of stock</p>
                   )}
                 </div>
+                   {/* Fraud Warning for Suspicious Review Images */}
+            {reviews.some(review => review.reviewerImage && review.imageAuthScore !== null && review.imageAuthScore <= 0.3) && (
+              <div className="bg-red-50 border-2 border-red-200 rounded-2xl shadow-lg p-6 mb-6">
+                <div className="flex items-start gap-4">
+                  <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-white font-bold text-lg">!</span>
+                  </div>
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-bold text-red-900">🚨 Potential Product Fraud Detected</h3>
+                    <div className="space-y-2">
+                      <p className="text-red-800 font-medium text-sm">
+                        ⚠️ Customer photos don't match the seller's product images
+                      </p>
+                      <p className="text-red-700 text-sm leading-relaxed">
+                        Our AI analysis found significant differences between what customers received and what's advertised. 
+                        This could indicate:
+                      </p>
+                      <ul className="text-red-700 text-sm space-y-1 ml-4">
+                        <li className="flex items-start gap-2">
+                          <span className="text-red-500 mt-1">•</span>
+                          <span>Counterfeit or fake products being sold</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-red-500 mt-1">•</span>
+                          <span>Misleading product photos by the seller</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-red-500 mt-1">•</span>
+                          <span>Bait-and-switch tactics</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-red-500 mt-1">•</span>
+                          <span>Poor quality control or wrong items shipped</span>
+                        </li>
+                      </ul>
+                      <div className="bg-red-100 border border-red-300 rounded-lg p-3 mt-3">
+                        <p className="text-red-800 font-medium text-sm flex items-center gap-2">
+                          <Flag size={16} />
+                          Recommendation: Exercise extreme caution before purchasing
+                        </p>
+                        <p className="text-red-700 text-xs mt-1">
+                          Consider looking for alternative products with better image authenticity scores.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {reviews
+                          .filter(review => review.reviewerImage && review.imageAuthScore !== null && review.imageAuthScore <= 0.3)
+                          .slice(0, 3)
+                          .map((review, index) => (
+                            <span key={index} className="bg-red-200 text-red-800 text-xs px-2 py-1 rounded-full">
+                              Review {index + 1}: {Math.round(review.imageAuthScore * 100)}% match
+                            </span>
+                          ))
+                        }
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
 
               {/* Delivery Info */}
                 <div className="bg-gray-50 rounded-xl p-4 space-y-3">
@@ -775,6 +841,70 @@ const ProductDetailPage = () => {
                               <p className={`leading-relaxed ${review.aiGenerated ? 'text-red-800' : 'text-gray-700'}`}>
                                 {review.review}
                               </p>
+
+                              {/* Reviewer Image Section */}
+                              {review.reviewerImage && (
+                                <div className="mt-4 space-y-3">
+                                  <div className="flex items-center gap-2">
+                                    <Camera size={16} className="text-gray-500" />
+                                    <span className="text-sm font-medium text-gray-700">Customer Photo</span>
+                                    {review.imageAuthScore && (
+                                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                        review.imageAuthScore > 0.7 
+                                          ? 'bg-green-100 text-green-800' 
+                                          : review.imageAuthScore > 0.4 
+                                          ? 'bg-yellow-100 text-yellow-800' 
+                                          : 'bg-red-100 text-red-800'
+                                      }`}>
+                                        {review.imageAuthScore > 0.7 ? '✓ Authentic' : 
+                                         review.imageAuthScore > 0.4 ? '⚠️ Questionable' : '❌ Suspicious'} 
+                                        ({Math.round(review.imageAuthScore * 100)}%)
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="relative inline-block">
+                                    <img 
+                                      src={`data:image/jpeg;base64,${review.reviewerImage}`}
+                                      alt="Customer uploaded photo"
+                                      className="max-w-xs max-h-48 rounded-lg shadow-md object-cover cursor-pointer hover:shadow-lg transition-shadow"
+                                      onClick={() => {
+                                        // Create modal for full-size image view
+                                        const modal = document.createElement('div');
+                                        modal.className = 'fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4';
+                                        modal.innerHTML = `
+                                          <div class="relative max-w-4xl max-h-full">
+                                            <img src="data:image/jpeg;base64,${review.reviewerImage}" 
+                                                 class="max-w-full max-h-full rounded-lg" 
+                                                 alt="Customer uploaded photo - full size" />
+                                            <button class="absolute top-4 right-4 bg-white text-black rounded-full w-8 h-8 flex items-center justify-center hover:bg-gray-100">
+                                              ×
+                                            </button>
+                                          </div>
+                                        `;
+                                        modal.onclick = (e) => {
+                                          if (e.target === modal || e.target.tagName === 'BUTTON') {
+                                            document.body.removeChild(modal);
+                                          }
+                                        };
+                                        document.body.appendChild(modal);
+                                      }}
+                                    />
+                                  </div>
+                                  {review.imageAnalysis && (
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                      <div className="flex items-start gap-2">
+                                        <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                          <span className="text-white text-xs">i</span>
+                                        </div>
+                                        <div>
+                                          <p className="text-blue-800 font-medium text-sm">Image Analysis</p>
+                                          <p className="text-blue-700 text-sm">{review.imageAnalysis}</p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                               
                               <div className="flex items-center gap-4 text-sm text-gray-500">
                                 <button className="flex items-center gap-2 hover:text-blue-600 transition-colors">
@@ -817,6 +947,8 @@ const ProductDetailPage = () => {
 
           {/* Right Column - Trust Sidebar - 25% */}
           <div className="lg:col-span-3">
+         
+            
             <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl shadow-lg border border-gray-100 p-6 sticky top-24">
               <TrustSidebar 
                 product={product}
@@ -868,7 +1000,9 @@ const ProductDetailPage = () => {
         </div>
       </div>
 
-      </>
+      {/* Add TrustAgent at the bottom */}
+      {product && <TrustAgent productId={product.id} />}
+    </>
   );
 };
 

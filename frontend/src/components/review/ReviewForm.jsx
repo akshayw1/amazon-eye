@@ -1,15 +1,18 @@
-import React, { useState, useContext } from 'react';
-import { Star, Send, AlertCircle, CheckCircle, X } from 'lucide-react';
+import React, { useState, useContext, useRef } from 'react';
+import { Star, Send, AlertCircle, CheckCircle, X, Upload, Image as ImageIcon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { reviewsApi } from '../../services/api';
 
 const ReviewForm = ({ productId, onReviewSubmitted, onClose }) => {
   const { user, isAuthenticated, logout } = useAuth();
+  const fileInputRef = useRef(null);
   const [formData, setFormData] = useState({
     rating: 0,
     title: '',
-    comment: ''
+    comment: '',
+    reviewerImage: null
   });
+  const [imagePreview, setImagePreview] = useState(null);
   const [hoveredRating, setHoveredRating] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState(null); // 'success', 'error', null
@@ -22,6 +25,40 @@ const ReviewForm = ({ productId, onReviewSubmitted, onClose }) => {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        setErrorMessage('Image size should be less than 5MB');
+        setSubmitStatus('error');
+        return;
+      }
+
+      if (!file.type.startsWith('image/')) {
+        setErrorMessage('Please upload an image file');
+        setSubmitStatus('error');
+        return;
+      }
+
+      setFormData(prev => ({ ...prev, reviewerImage: file }));
+      
+      // Create preview URL
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setFormData(prev => ({ ...prev, reviewerImage: null }));
+    setImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -56,16 +93,25 @@ const ReviewForm = ({ productId, onReviewSubmitted, onClose }) => {
     setErrorMessage('');
 
     try {
-      const response = await reviewsApi.createReview(productId, {
-        rating: formData.rating,
-        title: formData.title.trim(),
-        comment: formData.comment.trim()
-      });
+      // Create FormData object for multipart/form-data
+      const formDataToSend = new FormData();
+      formDataToSend.append('rating', formData.rating);
+      formDataToSend.append('title', formData.title.trim());
+      formDataToSend.append('comment', formData.comment.trim());
+      if (formData.reviewerImage) {
+        formDataToSend.append('reviewerImage', formData.reviewerImage);
+      }
+
+      const response = await reviewsApi.createReview(productId, formDataToSend);
 
       setSubmitStatus('success');
       
       // Reset form
-      setFormData({ rating: 0, title: '', comment: '' });
+      setFormData({ rating: 0, title: '', comment: '', reviewerImage: null });
+      setImagePreview(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
       
       // Notify parent component
       if (onReviewSubmitted) {
@@ -226,24 +272,67 @@ const ReviewForm = ({ productId, onReviewSubmitted, onClose }) => {
           </div>
         </div>
 
+        {/* Image Upload */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Upload Image (Optional)
+          </label>
+          <div className="mt-1 flex items-center space-x-4">
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              onChange={handleImageChange}
+              className="hidden"
+              disabled={isSubmitting}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              disabled={isSubmitting}
+            >
+              <div className="flex items-center space-x-2">
+                <Upload className="w-4 h-4" />
+                <span>Choose Image</span>
+              </div>
+            </button>
+            {imagePreview && (
+              <div className="relative">
+                <img
+                  src={imagePreview}
+                  alt="Preview"
+                  className="h-20 w-20 object-cover rounded-md"
+                />
+                <button
+                  type="button"
+                  onClick={handleRemoveImage}
+                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                  disabled={isSubmitting}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+          <p className="mt-2 text-sm text-gray-500">
+            Upload a photo of the product you received (max 5MB)
+          </p>
+        </div>
+
         {/* Submit Button */}
         <div className="flex justify-end">
           <button
             type="submit"
-            disabled={isSubmitting || !formData.rating || !formData.title.trim() || !formData.comment.trim()}
-            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
+            disabled={isSubmitting}
+            className={`flex items-center space-x-2 px-6 py-2 rounded-lg ${
+              isSubmitting
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700'
+            } text-white transition-colors`}
           >
-            {isSubmitting ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                <span>Submitting...</span>
-              </>
-            ) : (
-              <>
-                <Send className="w-4 h-4" />
-                <span>Submit Review</span>
-              </>
-            )}
+            <Send className="w-4 h-4" />
+            <span>{isSubmitting ? 'Submitting...' : 'Submit Review'}</span>
           </button>
         </div>
       </form>

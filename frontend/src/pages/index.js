@@ -4,6 +4,7 @@ export { default as Register } from './Register';
 export { default as ProductDetail } from './ProductDetail';
 export { default as Search } from './Search';
 export { default as AdminDashboard } from './AdminDashboard';
+export { default as AdminTrustAnalysis } from './AdminTrustAnalysis';
 export { default as SellerDashboard } from './SellerDashboard';
 export { default as Orders } from './Orders';
 export { default as OrderDetail } from './OrderDetail';

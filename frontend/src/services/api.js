@@ -4,7 +4,7 @@ import axios from 'axios';
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 // Create axios instance with base URL
-const api = axios.create({
+export const api = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
@@ -81,7 +81,12 @@ export const reviewsApi = {
 
   // Create a new review
   createReview: async (productId, reviewData) => {
-    const response = await api.post(`/reviews/${productId}`, reviewData);
+    // If reviewData is FormData, use multipart/form-data content type
+    const headers = reviewData instanceof FormData
+      ? { 'Content-Type': 'multipart/form-data' }
+      : { 'Content-Type': 'application/json' };
+
+    const response = await api.post(`/reviews/${productId}`, reviewData, { headers });
     return response.data;
   },
 

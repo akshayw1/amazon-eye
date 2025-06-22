@@ -30,6 +30,9 @@ export default {
           link: '#007185',
           'link-hover': '#C7511F',
         },
+        'amazon-blue': '#232F3E',
+        'amazon-yellow': '#FF9900',
+        'amazon-orange': '#FF9900',
       },
       backgroundColor: {
         primary: '#ffffff',
@@ -49,5 +52,6 @@ export default {
   plugins: [
     require('@tailwindcss/forms'),
     require('@tailwindcss/aspect-ratio'),
+    require('@tailwindcss/typography'),
   ],
 } 
