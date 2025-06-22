@@ -809,7 +809,21 @@ router.get('/comprehensive/:productId', async (req, res) => {
     // Get basic product information with all fields
     const product = await prisma.product.findUnique({
       where: { id: productId },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        price: true,
+        images: true,
+        category: true,
+        originalProductId: true,
+        trustScore: true,
+        // Network analysis fields
+        clusterId: true,
+        pageRank: true,
+        eigenvectorCent: true,
+        clusteringCoef: true,
+        weightedDegree: true,
         seller: {
           select: {
             id: true,
@@ -927,7 +941,7 @@ router.get('/comprehensive/:productId', async (req, res) => {
       product_ID: product.originalProductId || productId,
       fake_score: fakeScore,
       trust_score: product.trustScore || 0,
-      w_degree: reviews.length,
+      w_degree: product.weightedDegree || reviews.length,
       fake: fakeScore > 0.5,
       IP_score: Math.round(ipScore * 100) / 100,
       Listing_score: Math.round(listingScore * 100) / 100,
@@ -937,17 +951,25 @@ router.get('/comprehensive/:productId', async (req, res) => {
       return_summary: returnAnalysisResult.summary,
       total_reviews: reviews.length,
       total_returns: returnRequests.length,
+      
+      // Network analysis fields
+      cluster_ID: product.clusterId,
+      pagerank: product.pageRank,
+      eigenvector_cent: product.eigenvectorCent,
+      clustering_coef: product.clusteringCoef,
+      w_degree: product.weightedDegree,
+      
       seller_info: {
         id: product.seller.id,
         name: product.seller.name,
         email: product.seller.email
       },
-              analysis_details: {
-          ip_analysis: ipAnalysis.status === 'fulfilled' ? ipAnalysis.value.data : null,
-          edit_analysis: editAnalysis.status === 'fulfilled' ? editAnalysis.value.data : null,
-          review_analysis: reviewCallAnalysis.details || null,
-          return_analysis: returnAnalysisResult.details || null
-        },
+      analysis_details: {
+        ip_analysis: ipAnalysis.status === 'fulfilled' ? ipAnalysis.value.data : null,
+        edit_analysis: editAnalysis.status === 'fulfilled' ? editAnalysis.value.data : null,
+        review_analysis: reviewCallAnalysis.details || null,
+        return_analysis: returnAnalysisResult.details || null
+      },
       reviews: reviews.slice(0, 10).map(review => ({
         rating: review.reviewRating,
         helpful_votes: review.numberOfHelpful,

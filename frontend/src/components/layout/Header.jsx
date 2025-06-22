@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, ShoppingCart, User, Menu, MapPin, Globe, ChevronDown, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useCart } from '../../context/CartContext';
 
 const Header = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -10,6 +11,7 @@ const Header = () => {
   const navigate = useNavigate();
   const accountDropdownRef = useRef(null);
   const { user, isAuthenticated, logout } = useAuth();
+  const { getCartCount } = useCart();
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -29,6 +31,13 @@ const Header = () => {
     logout();
     setIsAccountDropdownOpen(false);
     navigate('/');
+  };
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+    }
   };
 
   return (
@@ -67,7 +76,7 @@ const Header = () => {
           </div>
 
           {/* Enhanced Search */}
-          <div className="flex-1 max-w-2xl mx-4">
+          <form onSubmit={handleSearch} className="flex-1 max-w-2xl mx-4">
             <div className="flex shadow-lg rounded-md overflow-hidden">
               <select className="bg-gray-100 text-gray-900 px-3 py-2 text-sm border-r border-gray-300 focus:outline-none focus:bg-white transition-colors">
                 <option>All</option>
@@ -83,11 +92,11 @@ const Header = () => {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="flex-1 px-3 py-2 text-gray-900 border-0 focus:outline-none"
               />
-              <button className="bg-yellow-400 px-4 py-2 hover:bg-yellow-500 transition-colors">
+              <button type="submit" className="bg-yellow-400 px-4 py-2 hover:bg-yellow-500 transition-colors">
                 <Search size={18} className="text-gray-900" />
               </button>
             </div>
-          </div>
+          </form>
 
           {/* Right side actions */}
           <div className="flex items-center gap-2 text-sm">
@@ -163,13 +172,31 @@ const Header = () => {
                     )}
                     
                     <div className="border-t mt-2 pt-2">
-                      <button className="w-full text-left px-4 py-2 hover:bg-gray-100 transition-colors text-sm">
+                      <button 
+                        onClick={() => {
+                          navigate('/account');
+                          setIsAccountDropdownOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-2 hover:bg-gray-100 transition-colors text-sm"
+                      >
                         Your Account
                       </button>
-                      <button className="w-full text-left px-4 py-2 hover:bg-gray-100 transition-colors text-sm">
+                      <button 
+                        onClick={() => {
+                          navigate('/orders');
+                          setIsAccountDropdownOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-2 hover:bg-gray-100 transition-colors text-sm"
+                      >
                         Your Orders
                       </button>
-                      <button className="w-full text-left px-4 py-2 hover:bg-gray-100 transition-colors text-sm">
+                      <button 
+                        onClick={() => {
+                          navigate('/wishlist');
+                          setIsAccountDropdownOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-2 hover:bg-gray-100 transition-colors text-sm"
+                      >
                         Your Wish List
                       </button>
                     </div>
@@ -179,16 +206,24 @@ const Header = () => {
             </div>
 
             {/* Returns & Orders */}
-            <div className="hidden md:flex flex-col items-start hover:text-white transition-colors cursor-pointer px-2 py-1 rounded hover:bg-gray-700">
+            <div 
+              onClick={() => navigate('/orders')}
+              className="hidden md:flex flex-col items-start hover:text-white transition-colors cursor-pointer px-2 py-1 rounded hover:bg-gray-700"
+            >
               <span className="text-xs text-gray-300">Returns</span>
               <span className="text-sm font-medium">& Orders</span>
             </div>
 
             {/* Cart */}
-            <button className="flex items-center gap-1 hover:text-white transition-colors relative px-2 py-1 rounded hover:bg-gray-700">
+            <button 
+              onClick={() => navigate('/cart')}
+              className="flex items-center gap-1 hover:text-white transition-colors relative px-2 py-1 rounded hover:bg-gray-700"
+            >
               <div className="relative">
                 <ShoppingCart size={20} />
-                <span className="absolute -top-2 -right-2 bg-yellow-400 text-gray-900 text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">0  </span>
+                <span className="absolute -top-2 -right-2 bg-yellow-400 text-gray-900 text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                  {getCartCount()}
+                </span>
               </div>
               <span className="hidden lg:inline text-sm font-medium ml-1">Cart</span>
             </button>
@@ -199,26 +234,37 @@ const Header = () => {
       {/* Extended Categories Navigation */}
       <nav className="bg-gray-800 border-t border-gray-700">
         <div className="max-w-7xl mx-auto px-4">
-          <div className="flex items-center gap-5 py-2 text-sm overflow-x-hidden">
-            {/* All Categories Link */}
-            <span className="flex items-center gap-1 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded transition-colors whitespace-nowrap text-sm cursor-pointer">
-              <Menu size={14} />
-              <span className="font-medium">All</span>
-            </span>
-
-            {/* Quick Navigation Links */}
-            {[
-              'Fresh', 'MX Player', 'Sell', 'Bestsellers', 'Mobiles', 'Today\'s Deals', 
-              'Customer Service', 'Electronics', 'Prime', 'Fashion', 'New Releases', 
-              'Home & Kitchen', 'Amazon Pay', 'Computers', 'Books'
-            ].map((item) => (
-              <span 
-                key={item} 
-                className="whitespace-nowrap hover:text-yellow-400 transition-colors cursor-pointer px-2 py-1 rounded hover:bg-gray-700 text-sm"
-              >
-                {item}
-              </span>
-            ))}
+          <div className="flex items-center space-x-8 py-2">
+            <button 
+              onClick={() => navigate('/')}
+              className="text-sm hover:text-white transition-colors"
+            >
+              All
+            </button>
+            <button 
+              onClick={() => navigate('/search?category=Electronics')}
+              className="text-sm hover:text-white transition-colors"
+            >
+              Electronics
+            </button>
+            <button 
+              onClick={() => navigate('/search?category=Fashion')}
+              className="text-sm hover:text-white transition-colors"
+            >
+              Fashion
+            </button>
+            <button 
+              onClick={() => navigate('/search?category=Home')}
+              className="text-sm hover:text-white transition-colors"
+            >
+              Home & Garden
+            </button>
+            <button 
+              onClick={() => navigate('/search?category=Sports')}
+              className="text-sm hover:text-white transition-colors"
+            >
+              Sports
+            </button>
           </div>
         </div>
       </nav>

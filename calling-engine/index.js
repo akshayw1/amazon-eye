@@ -10,6 +10,8 @@ import { v4 as uuidv4 } from "uuid";
 // Load environment variables from .env file
 dotenv.config();
 
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000/api';
+
 // Enhanced logging utility
 class Logger {
   static formatLog(level, category, message, meta = {}) {
@@ -603,7 +605,7 @@ fastify.register(async fastifyInstance => {
               // Update call status to in-progress
               (async () => {
                 try {
-                  await axios.put(`http://localhost:3000/api/calls/${callSid}/status`, {
+                  await axios.put(`${API_BASE_URL}/calls/${callSid}/status`, {
                     isCalled: 'initiated'
                   });
                   Logger.info('DATABASE_UPDATE', 'Call status updated to initiated', {
@@ -668,7 +670,7 @@ fastify.register(async fastifyInstance => {
                     transcriptLength: transcriptCollection.length
                   });
 
-                  await axios.put(`http://localhost:3000/api/orders/returns/call/${callSid}/status`, {
+                  await axios.put(`${API_BASE_URL}/orders/returns/call/${callSid}/status`, {
                     transcript: transcriptCollection,
                     isCalled: 'completed'
                   });

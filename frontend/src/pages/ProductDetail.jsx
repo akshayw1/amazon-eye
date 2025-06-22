@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useCart } from '../context/CartContext';
 import Layout from '../components/layout/Layout';
 import { TrustSidebar, TrustSummary, TrustBadge } from '../components/trust';
 import { ReviewForm } from '../components';
 import { Pagination } from '../components/ui';
-import { productsApi, reviewsApi } from '../services/api';
+import { productsApi, reviewsApi, API_URL } from '../services/api';
 import { 
   Star, 
   Heart,
@@ -39,13 +40,15 @@ import {
   Filter,
   Clock,
   Camera,
-  Plus
+  Plus,
+  ShoppingCart
 } from 'lucide-react';
 
 const ProductDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { addToCart } = useCart();
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState('M');
@@ -69,6 +72,8 @@ const ProductDetailPage = () => {
   });
   const [currentPage, setCurrentPage] = useState(1);
   const [showReviewForm, setShowReviewForm] = useState(false);
+  const [addingToCart, setAddingToCart] = useState(false);
+  const [cartError, setCartError] = useState(null);
 
   // Handle new review submission
   const handleReviewSubmitted = (newReview) => {
@@ -291,6 +296,31 @@ const ProductDetailPage = () => {
     }, 2000);
   };
 
+  const handleAddToCart = async () => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
+    setAddingToCart(true);
+    setCartError(null);
+
+    try {
+      const success = await addToCart(id, quantity);
+      if (success) {
+        // Show success message or update cart count
+        navigate('/cart');
+      } else {
+        throw new Error('Failed to add item to cart');
+      }
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      setCartError('Failed to add item to cart. Please try again.');
+    } finally {
+      setAddingToCart(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -488,17 +518,44 @@ const ProductDetailPage = () => {
               </div>
 
               {/* Action Buttons */}
-                <div className="space-y-3 pt-4">
-                  <button className="w-full bg-gradient-to-r from-yellow-400 to-orange-400 hover:from-yellow-500 hover:to-orange-500 text-gray-900 font-bold py-4 px-6 rounded-xl transition-all duration-200 transform hover:scale-[1.02] shadow-lg hover:shadow-xl">
-                  Add to Cart
-                </button>
-                  <button 
-                    onClick={handleBuyNow}
-                    className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold py-4 px-6 rounded-xl transition-all duration-200 transform hover:scale-[1.02] shadow-lg hover:shadow-xl"
-                  >
-                    Buy Now
-                  </button>
-              </div>
+                <div className="flex flex-col gap-4 mt-6">
+                  {cartError && (
+                    <div className="text-red-500 text-sm">{cartError}</div>
+                  )}
+                  <div className="flex gap-4">
+                    <button
+                      onClick={handleAddToCart}
+                      disabled={addingToCart || !product?.stock}
+                      className={`flex-1 bg-yellow-400 text-gray-900 py-3 rounded-md font-medium hover:bg-yellow-500 transition-colors flex items-center justify-center gap-2 ${
+                        (addingToCart || !product?.stock) ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      {addingToCart ? (
+                        <>
+                          <div className="w-5 h-5 border-t-2 border-gray-900 rounded-full animate-spin"></div>
+                          Adding...
+                        </>
+                      ) : (
+                        <>
+                          <ShoppingCart size={20} />
+                          Add to Cart
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={handleBuyNow}
+                      disabled={!product?.stock}
+                      className={`flex-1 bg-orange-500 text-white py-3 rounded-md font-medium hover:bg-orange-600 transition-colors ${
+                        !product?.stock ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      Buy Now
+                    </button>
+                  </div>
+                  {!product?.stock && (
+                    <p className="text-red-500 text-sm text-center">Out of stock</p>
+                  )}
+                </div>
 
               {/* Delivery Info */}
                 <div className="bg-gray-50 rounded-xl p-4 space-y-3">

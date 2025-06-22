@@ -82,10 +82,14 @@ src/
 
 ## Environment Variables
 
-Create a `.env` file in the root directory:
-
+1. Create a `.env` file in the frontend directory with the following variables:
 ```env
 VITE_API_URL=http://localhost:3000/api
+```
+
+2. For production, create a `.env.production` file with your production API URL:
+```env
+VITE_API_URL=https://your-production-api.com/api
 ```
 
 ## Contributing

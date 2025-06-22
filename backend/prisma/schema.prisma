@@ -27,6 +27,7 @@ model User {
   orders        Order[]         // Orders placed by the user
   returnRequests ReturnRequest[] // Return requests created by the user
   productEdits  ProductEditHistory[] // Product edits made by the user
+  cart          Cart?          // User's shopping cart
 }
 
 model Product {
@@ -43,6 +44,7 @@ model Product {
   orderItems  OrderItem[]     // Order items for this product
   returnRequests ReturnRequest[] // Return requests for this product
   editHistory ProductEditHistory[] // Edit history for this product
+  cartItems   CartItem[]     // Cart items for this product
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
   
@@ -52,6 +54,13 @@ model Product {
   trustScore       Float?   @map("trust_score") // Trust score from original data
   reviewCount      Int?     @map("n_of_reviews") // Number of reviews
   averageRating    Float?   @map("avg_review_rating") // Average review rating
+
+  // Network analysis fields
+  clusterId        Int?     @map("cluster_ID") // Cluster ID from network analysis
+  pageRank         Float?   @map("pagerank") // PageRank centrality
+  eigenvectorCent  Float?   @map("eigenvector_cent") // Eigenvector centrality
+  clusteringCoef   Float?   @map("clustering_coef") // Clustering coefficient
+  weightedDegree   Int?     @map("w_degree") // Weighted degree
 
   @@index([sellerId])
 }
@@ -227,4 +236,31 @@ enum ReturnStatus {
   REJECTED
   PROCESSED
   COMPLETED
+}
+
+model Cart {
+  id        String     @id @default(uuid())
+  userId    String     @unique // One cart per user
+  user      User       @relation(fields: [userId], references: [id])
+  items     CartItem[]
+  total     Float      @default(0)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([userId])
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  cartId    String
+  cart      Cart     @relation(fields: [cartId], references: [id])
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Float    // Price at time of adding to cart
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([cartId])
+  @@index([productId])
 }
